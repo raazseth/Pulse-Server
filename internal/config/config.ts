@@ -12,6 +12,13 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
 ];
 
+/** Known Vercel frontends (sigma is primary; others stay for previews / older links). */
+const PULSE_WEB_VERCEL_ORIGINS = [
+  "https://pulse-web-sigma.vercel.app",
+  "https://pulse-web-git-main-rajs-projects-ab8ef4bc.vercel.app",
+  "https://pulse-8tgnnw7wz-rajs-projects-ab8ef4bc.vercel.app",
+];
+
 /** Vercel preview / branch deploy hostnames end with `-${team}.vercel.app`. */
 const CORS_VERCEL_TEAM_SUFFIX = process.env.CORS_VERCEL_TEAM_SUFFIX?.trim() || undefined;
 
@@ -57,7 +64,7 @@ function resolveAllowedOrigins(): string[] {
         .map((o) => o.trim())
         .filter(Boolean)
     : [];
-  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv])];
+  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...PULSE_WEB_VERCEL_ORIGINS, ...fromEnv])];
 }
 
 export const config = {
