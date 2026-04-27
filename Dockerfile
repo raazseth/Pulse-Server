@@ -1,4 +1,3 @@
-# ── Stage 1: build ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 WORKDIR /app
 
@@ -12,22 +11,19 @@ COPY types.d.ts ./
 
 RUN npm run build
 
-# ── Stage 2: production image ─────────────────────────────────────────────────
 FROM node:22-alpine AS production
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=8080
 
-# Install production deps only (no dev/build tools)
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
-# Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
-EXPOSE 3000
+EXPOSE 8080
 
-# Drop root privileges
 USER node
 
-CMD ["node", "dist/cmd/api/main.js"]
+CMD ["npm", "start"]

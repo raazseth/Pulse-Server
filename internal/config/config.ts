@@ -16,7 +16,19 @@ function requireInProduction(name: string, fallback: string): string {
   return value;
 }
 
-const SERVER_PORT = process.env.PORT || 3000;
+function resolvePort(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+    if (value !== undefined && value !== "") {
+      console.warn(`[config] Invalid PORT "${value}" — falling back to ${fallback}.`);
+    }
+    return fallback;
+  }
+  return parsed;
+}
+
+const SERVER_PORT = resolvePort(process.env.PORT, 8080);
+const SERVER_HOST = process.env.HOST?.trim() || "0.0.0.0";
 const HUD_WS_PATH = process.env.HUD_WS_PATH || "/ws/transcript";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -28,6 +40,7 @@ const JWT_REFRESH_SECRET = requireInProduction("JWT_REFRESH_SECRET", "dev-refres
 
 export const config = {
   server: {
+    host: SERVER_HOST,
     port: SERVER_PORT,
   },
   hud: {

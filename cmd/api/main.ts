@@ -43,7 +43,6 @@ async function main() {
   const app = express();
   app.use(express.json());
 
-  // S-01: authService passed to initHudSocket for WS token verification
   const { router, hudService, authService, pg } = await createApp();
   app.use("/api/v1", router);
   app.use(errorHandler);
@@ -51,8 +50,13 @@ async function main() {
   const server = http.createServer(app);
   initHudSocket(server, hudService, authService);
 
-  server.listen(config.server.port, () => {
-    logger.info(`Server ▸ http://localhost:${config.server.port}`);
+  server.on("error", (err) => {
+    logger.error("Server ▸ startup error", err);
+  });
+
+  server.listen(config.server.port, config.server.host, () => {
+    logger.info("App    ▸ pulse-hud");
+    logger.info(`Server ▸ host=${config.server.host} port=${config.server.port}`);
     logger.info(`Server ▸ NODE_ENV=${process.env.NODE_ENV ?? "development"}`);
   });
 
@@ -73,6 +77,15 @@ async function main() {
   process.once("SIGTERM", onSignal);
   process.once("SIGINT", onSignal);
 }
+
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled promise rejection", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught exception", error);
+  process.exit(1);
+});
 
 main().catch((err) => {
   logger.error("Failed to start server", err);
