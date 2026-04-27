@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response, Router, RequestHandler } from "express";
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { ok } from "@/internal/pkg/ApiResponse";
@@ -73,48 +72,12 @@ export function createRouter(
     },
     frameguard: { action: "deny" },
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
   }));
   router.use(express.json({ limit: "1mb" }));
   router.use(express.urlencoded({ extended: true, limit: "1mb" }));
   // S-16: cookie-parser required for httpOnly refresh-token cookies
   router.use(cookieParser());
-  const corsOrigins = new Set(config.cors.allowedOrigins);
-  const vercelSuffix = config.cors.vercelTeamSuffix;
-
-  function isAllowedCorsOrigin(origin: string): boolean {
-    if (corsOrigins.has(origin)) {
-      return true;
-    }
-    if (!vercelSuffix) {
-      return false;
-    }
-    try {
-      const { protocol, hostname } = new URL(origin);
-      if (protocol !== "https:") {
-        return false;
-      }
-      const needle = `-${vercelSuffix}.vercel.app`;
-      return hostname.endsWith(needle);
-    } catch {
-      return false;
-    }
-  }
-
-  router.use(cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (isAllowedCorsOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
-    },
-    credentials: true,
-    optionsSuccessStatus: 204,
-  }));
 
   router.get("/health", (_req, res) => {
     const memory = process.memoryUsage();

@@ -7,6 +7,7 @@ import express, {
 import http from "http";
 import { createApp } from "@/internal/app/app";
 import { config } from "@/internal/config/config";
+import { pulseCors } from "@/internal/delivery/http/pulseCors";
 import { initHudSocket } from "@/internal/domain/hud/socket/hud.socket";
 import { AppError } from "@/internal/pkg/AppError";
 import { logger } from "@/internal/pkg/logger";
@@ -73,6 +74,9 @@ async function main() {
       },
     });
   });
+
+  // Must run before the readiness gate: OPTIONS and 503 responses still need CORS headers.
+  app.use("/api/v1", pulseCors);
 
   app.use((req, res, next) => {
     if (ready || req.path === "/api/v1/health") {
