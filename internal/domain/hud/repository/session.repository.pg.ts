@@ -105,6 +105,9 @@ export class PostgresSessionRepository implements SessionRepository {
       ALTER TABLE hud_sessions ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT '';
       ALTER TABLE hud_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT '';
       ALTER TABLE hud_sessions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+      ALTER TABLE hud_sessions ADD COLUMN IF NOT EXISTS created_by TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_hud_sessions_created_by ON hud_sessions (created_by, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS hud_notes (
         id TEXT PRIMARY KEY,
@@ -162,8 +165,9 @@ export class PostgresSessionRepository implements SessionRepository {
     const { rows } = await this.pool.query<{
       id: string; context_json: string; title: string; facilitator: string;
       audience: string; role: string; status: string; created_at: string; updated_at: string;
+      created_by: string | null;
     }>(
-      "SELECT id, context_json, title, facilitator, audience, role, status, created_at, updated_at FROM hud_sessions WHERE id = $1",
+      "SELECT id, context_json, title, facilitator, audience, role, status, created_at, updated_at, created_by FROM hud_sessions WHERE id = $1",
       [sessionId],
     );
     if (!rows[0]) return null;
@@ -176,6 +180,7 @@ export class PostgresSessionRepository implements SessionRepository {
       audience: r.audience,
       role: r.role,
       status: r.status as SessionStatus,
+      ...(r.created_by ? { createdBy: r.created_by } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };
@@ -326,11 +331,11 @@ export class PostgresSessionRepository implements SessionRepository {
     return { session, transcriptEntries, tags, prompts, events, signals };
   }
 
-  async createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string }): Promise<HudSession> {
+  async createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string; createdBy: string }): Promise<HudSession> {
     const now = new Date().toISOString();
     await this.pool.query(
-      "INSERT INTO hud_sessions (id, context_json, title, facilitator, audience, role, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-      [input.id, JSON.stringify({}), input.title, input.facilitator, input.audience, input.role, 'active', now, now],
+      "INSERT INTO hud_sessions (id, context_json, title, facilitator, audience, role, status, created_at, updated_at, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [input.id, JSON.stringify({}), input.title, input.facilitator, input.audience, input.role, 'active', now, now, input.createdBy],
     );
     return {
       id: input.id,
@@ -340,21 +345,25 @@ export class PostgresSessionRepository implements SessionRepository {
       audience: input.audience,
       role: input.role,
       status: 'active',
+      createdBy: input.createdBy,
       createdAt: now,
       updatedAt: now,
     };
   }
 
-  async listSessions(): Promise<HudSession[]> {
+  async listSessions(createdBy: string): Promise<HudSession[]> {
     const { rows } = await this.pool.query<{
       id: string; context_json: string; title: string; facilitator: string;
       audience: string; role: string; status: string; created_at: string; updated_at: string;
       note_count: number;
+      created_by: string | null;
     }>(
-      `SELECT s.id, s.context_json, s.title, s.facilitator, s.audience, s.role, s.status, s.created_at, s.updated_at,
+      `SELECT s.id, s.context_json, s.title, s.facilitator, s.audience, s.role, s.status, s.created_at, s.updated_at, s.created_by,
               (SELECT COUNT(*)::int FROM hud_notes n WHERE n.session_id = s.id) AS note_count
        FROM hud_sessions s
+       WHERE s.created_by = $1
        ORDER BY s.created_at DESC`,
+      [createdBy],
     );
     return rows.map((r) => ({
       id: r.id,
@@ -364,6 +373,7 @@ export class PostgresSessionRepository implements SessionRepository {
       audience: r.audience,
       role: r.role,
       status: r.status as SessionStatus,
+      ...(r.created_by ? { createdBy: r.created_by } : {}),
       noteCount: r.note_count,
       createdAt: r.created_at,
       updatedAt: r.updated_at,

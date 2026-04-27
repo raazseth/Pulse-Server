@@ -27,8 +27,8 @@ export interface SessionRepository {
   listEvents(sessionId: string): Promise<SessionEvent[]>;
   listSignals(sessionId: string): Promise<SignalCue[]>;
   getSessionSnapshot(sessionId: string): Promise<SessionSnapshot | null>;
-  createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string }): Promise<HudSession>;
-  listSessions(): Promise<HudSession[]>;
+  createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string; createdBy: string }): Promise<HudSession>;
+  listSessions(createdBy: string): Promise<HudSession[]>;
   deleteSession(sessionId: string): Promise<void>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
   createNote(note: { id: string; sessionId: string; label: string; body: string }): Promise<SessionNote>;

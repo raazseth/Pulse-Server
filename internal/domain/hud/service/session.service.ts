@@ -220,7 +220,7 @@ export class HudSessionService {
     return this.getSessionSnapshot(input.sessionId);
   }
 
-  async createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string }): Promise<HudSession> {
+  async createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string; createdBy: string }): Promise<HudSession> {
     return this.sessions.createSession(input);
   }
 
@@ -228,8 +228,8 @@ export class HudSessionService {
     return this.sessions.getSession(sessionId);
   }
 
-  async listSessions(): Promise<HudSession[]> {
-    return this.sessions.listSessions();
+  async listSessions(createdBy: string): Promise<HudSession[]> {
+    return this.sessions.listSessions(createdBy);
   }
 
   async deleteSession(sessionId: string): Promise<void> {

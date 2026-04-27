@@ -108,6 +108,37 @@ describe("POST /api/v1/hud/sessions/:sessionId/transcript", () => {
   });
 });
 
+describe("GET /api/v1/hud/sessions", () => {
+  it("returns only sessions created by the authenticated user", async () => {
+    const userA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const userB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const headerA = makeAuthHeader(userA, "a@pulse.test");
+    const headerB = makeAuthHeader(userB, "b@pulse.test");
+
+    const aRes = await agent
+      .post("/api/v1/hud/sessions")
+      .set("Authorization", headerA)
+      .send({ title: "Only A" })
+      .expect(201);
+    await agent
+      .post("/api/v1/hud/sessions")
+      .set("Authorization", headerB)
+      .send({ title: "Only B" })
+      .expect(201);
+
+    const listA = await agent.get("/api/v1/hud/sessions").set("Authorization", headerA).expect(200);
+    expect(listA.body.success).toBe(true);
+    const dataA = listA.body.data as { id: string; title: string }[];
+    expect(dataA.some((s) => s.id === aRes.body.data.id)).toBe(true);
+    expect(dataA.some((s) => s.title === "Only B")).toBe(false);
+
+    const listB = await agent.get("/api/v1/hud/sessions").set("Authorization", headerB).expect(200);
+    const dataB = listB.body.data as { title: string }[];
+    expect(dataB.some((s) => s.title === "Only B")).toBe(true);
+    expect(dataB.some((s) => s.title === "Only A")).toBe(false);
+  });
+});
+
 describe("GET /api/v1/hud/sessions/:sessionId", () => {
   it("returns the session snapshot after adding data", async () => {
     const sessionId = makeSessionId();

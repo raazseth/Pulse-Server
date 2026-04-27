@@ -23,6 +23,10 @@ export class HudHandler {
 
   createSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return next(new AppError("Authentication required", 0, SC.UNAUTHORIZED));
+      }
       const { title, facilitator = '', audience = '', role = '' } = req.body as CreateSessionInput;
       const session = await this.service.createSession({
         id: randomUUID(),
@@ -30,6 +34,7 @@ export class HudHandler {
         facilitator,
         audience,
         role,
+        createdBy: userId,
       });
       const summary = { id: session.id, title: session.title, status: session.status, createdAt: session.createdAt };
       res.status(SC.CREATED).json(created(summary, "Session created"));
@@ -40,7 +45,11 @@ export class HudHandler {
 
   listSessions = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const sessions = await this.service.listSessions();
+      const userId = req.user?.userId;
+      if (!userId) {
+        return next(new AppError("Authentication required", 0, SC.UNAUTHORIZED));
+      }
+      const sessions = await this.service.listSessions(userId);
       const summaries = sessions.map(s => ({ id: s.id, title: s.title, status: s.status, noteCount: s.noteCount ?? 0, createdAt: s.createdAt }));
       res.status(SC.OK).json(ok(summaries, "Sessions fetched"));
     } catch (error) {

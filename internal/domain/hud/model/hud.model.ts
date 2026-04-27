@@ -24,6 +24,8 @@ export interface HudSession {
   audience: string;
   role: string;
   status: SessionStatus;
+  /** Set when created via POST /sessions (API user). Omitted for legacy / auto-created rows. */
+  createdBy?: string;
   noteCount?: number;
   createdAt: string;
   updatedAt: string;
