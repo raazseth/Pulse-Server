@@ -1,0 +1,17 @@
+const responseType = {
+    OK: 200,
+    CREATED: 201,
+    NO_CONTENT: 204,
+    INTERNAL_SERVER_ERROR: 500,
+    BAD_REQUEST: 400,
+    UNAUTHORIZED: 401,
+    NOT_FOUND: 404,
+    WRONG_ENTITY: 422,
+    FORBIDDEN: 403,
+    NOT_IMPLEMENTED: 501,
+    SERVICE_UNAVAILABLE: 503,
+    TOO_MANY_REQUESTS: 429,
+    CONFLICT: 409
+};
+
+export default responseType;
