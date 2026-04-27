@@ -78,9 +78,21 @@ export function createRouter(
   router.use(express.urlencoded({ extended: true, limit: "1mb" }));
   // S-16: cookie-parser required for httpOnly refresh-token cookies
   router.use(cookieParser());
+  const corsOrigins = new Set(config.cors.allowedOrigins);
   router.use(cors({
-    origin: config.cors.allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (corsOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
     credentials: true,
+    optionsSuccessStatus: 204,
   }));
 
   router.get("/health", (_req, res) => {

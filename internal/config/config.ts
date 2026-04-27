@@ -5,6 +5,13 @@ dotenv.config({ path: `.env.${NODE_ENV}` });
 dotenv.config();
 
 const isProduction = NODE_ENV === "production";
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://pulse-server-970597358569.europe-west1.run.app",
+];
 
 function requireInProduction(name: string, fallback: string): string {
   const value = process.env[name];
@@ -41,6 +48,16 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const JWT_SECRET = requireInProduction("JWT_SECRET", "dev-jwt-secret-change-in-production");
 const JWT_REFRESH_SECRET = requireInProduction("JWT_REFRESH_SECRET", "dev-refresh-secret-change-in-production");
 
+function resolveAllowedOrigins(): string[] {
+  const fromEnv = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : [];
+  return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv])];
+}
+
 export const config = {
   server: {
     host: SERVER_HOST,
@@ -58,8 +75,6 @@ export const config = {
     jwtRefreshSecret: JWT_REFRESH_SECRET,
   },
   cors: {
-    allowedOrigins: process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-      : ["http://localhost:5173", "http://localhost:3000"],
+    allowedOrigins: resolveAllowedOrigins(),
   },
 };
