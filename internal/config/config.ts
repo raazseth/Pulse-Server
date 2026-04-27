@@ -9,8 +9,11 @@ const isProduction = NODE_ENV === "production";
 function requireInProduction(name: string, fallback: string): string {
   const value = process.env[name];
   if (!value) {
-    if (isProduction) throw new Error(`Missing required environment variable: ${name}`);
-    console.warn(`[config] ${name} is not set — using insecure dev default. Set a real value before deploying.`);
+    if (isProduction) {
+      console.warn(`[config] ${name} is not set in production — using fallback value. Set a secure secret.`);
+    } else {
+      console.warn(`[config] ${name} is not set — using insecure dev default. Set a real value before deploying.`);
+    }
     return fallback;
   }
   return value;

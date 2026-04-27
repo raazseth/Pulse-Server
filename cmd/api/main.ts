@@ -42,28 +42,87 @@ const errorHandler: ErrorRequestHandler = (
 async function main() {
   const app = express();
   app.use(express.json());
-
-  const { router, hudService, authService, pg } = await createApp();
-  app.use("/api/v1", router);
-  app.use(errorHandler);
+  let ready = false;
+  let startupError = "Booting";
+  let closeStorage: (() => Promise<void>) | null = null;
 
   const server = http.createServer(app);
-  initHudSocket(server, hudService, authService);
 
   server.on("error", (err) => {
     logger.error("Server ▸ startup error", err);
   });
+
+  app.get("/api/v1/health", (_req, res) => {
+    if (ready) {
+      res.status(200).json({
+        success: true,
+        data: {
+          status: "up",
+          service: "pulse-hud",
+          env: process.env.NODE_ENV ?? "development",
+        },
+      });
+      return;
+    }
+    res.status(503).json({
+      success: false,
+      data: {
+        status: "starting",
+        service: "pulse-hud",
+        message: startupError,
+      },
+    });
+  });
+
+  app.use((req, res, next) => {
+    if (ready || req.path === "/api/v1/health") {
+      next();
+      return;
+    }
+    res.status(503).json({
+      type: SC.SERVICE_UNAVAILABLE,
+      success: false,
+      message: "Service is starting. Try again shortly.",
+      data: null,
+    });
+  });
+
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  const initRuntime = async () => {
+    while (!ready) {
+      try {
+        const { router, hudService, authService, pg } = await createApp();
+        closeStorage = () => pg.close();
+        app.use("/api/v1", router);
+        app.use(errorHandler);
+        initHudSocket(server, hudService, authService);
+        ready = true;
+        startupError = "";
+        logger.info("Runtime ▸ dependencies initialized");
+      } catch (err) {
+        startupError = err instanceof Error ? err.message : String(err);
+        logger.error("Runtime ▸ initialization failed, retrying in 5s", err);
+        await wait(5000);
+      }
+    }
+  };
 
   server.listen(config.server.port, config.server.host, () => {
     logger.info("App    ▸ pulse-hud");
     logger.info(`Server ▸ host=${config.server.host} port=${config.server.port}`);
     logger.info(`Server ▸ NODE_ENV=${process.env.NODE_ENV ?? "development"}`);
   });
+  initRuntime().catch((err) => {
+    logger.error("Runtime ▸ background initializer crashed", err);
+  });
 
   const shutdown = async () => {
     logger.info("Server ▸ shutting down...");
     server.close(() => logger.info("Server ▸ HTTP server closed"));
-    await pg.close();
+    if (closeStorage) {
+      await closeStorage();
+    }
     process.exit(0);
   };
 

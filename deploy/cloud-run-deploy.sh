@@ -41,11 +41,12 @@ gcloud run deploy "${SERVICE_NAME}" \
   --region "${REGION}" \
   --platform managed \
   --allow-unauthenticated \
-  --port 3000 \
+  --port 8080 \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 10 \
+  --timeout 300 \
   --set-env-vars "NODE_ENV=production" \
   --set-secrets "DATABASE_URL=PULSE_DATABASE_URL:latest,JWT_SECRET=PULSE_JWT_SECRET:latest,JWT_REFRESH_SECRET=PULSE_JWT_REFRESH_SECRET:latest" \
   --quiet
