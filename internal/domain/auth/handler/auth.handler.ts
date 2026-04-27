@@ -4,12 +4,26 @@ import { ok, created } from "@/internal/pkg/ApiResponse";
 import SC from "@/internal/pkg/response";
 import { AuthService } from "@/internal/domain/auth/service/auth.service";
 
+const isProduction = process.env.NODE_ENV === "production";
+/** Strict blocks cross-site cookies; SPA on Vercel + API on Cloud Run needs None+Secure. */
+const REFRESH_COOKIE_SAMESITE = isProduction ? ("none" as const) : ("lax" as const);
+
 const COOKIE_OPTS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
+  secure: isProduction,
+  sameSite: REFRESH_COOKIE_SAMESITE,
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
+
+function clearRefreshCookie(res: Response) {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: REFRESH_COOKIE_SAMESITE,
+    path: "/",
+  });
+}
 
 export class AuthHandler {
   constructor(private readonly authService: AuthService) {}
@@ -87,7 +101,7 @@ export class AuthHandler {
       if (refreshToken) {
         await this.authService.revokeRefreshToken(refreshToken);
       }
-      res.clearCookie("refreshToken", { httpOnly: true, sameSite: "strict" });
+      clearRefreshCookie(res);
       res.status(SC.OK).json(ok(null, "Logged out"));
     } catch (err) {
       next(new AppError("Logout failed", 0, SC.INTERNAL_SERVER_ERROR));
