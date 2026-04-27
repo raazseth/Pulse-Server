@@ -10,8 +10,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://pulse-server-970597358569.europe-west1.run.app",
 ];
+
+/** Vercel preview / branch deploy hostnames end with `-${team}.vercel.app`. */
+const CORS_VERCEL_TEAM_SUFFIX = process.env.CORS_VERCEL_TEAM_SUFFIX?.trim() || undefined;
 
 function requireInProduction(name: string, fallback: string): string {
   const value = process.env[name];
@@ -76,5 +78,6 @@ export const config = {
   },
   cors: {
     allowedOrigins: resolveAllowedOrigins(),
+    vercelTeamSuffix: CORS_VERCEL_TEAM_SUFFIX,
   },
 };

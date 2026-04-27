@@ -74,7 +74,8 @@ Copy `.env.example` to the appropriate file (`.env.development`, `.env.productio
 | `AI_PROVIDER` | No | auto-detect | `openai` or `gemini`. Auto-detects from keys if unset |
 | `OPENAI_API_KEY` | No | — | Enables OpenAI gpt-4o-mini suggestions |
 | `GEMINI_API_KEY` | No | — | Enables Gemini 2.0 Flash suggestions |
-| `ALLOWED_ORIGINS` | No | `localhost:5173,localhost:3000` | Comma-separated CORS origins |
+| `ALLOWED_ORIGINS` | No | localhost dev URLs | Comma-separated browser origins allowed to call the API (include every production / custom Vercel hostname) |
+| `CORS_VERCEL_TEAM_SUFFIX` | No | — | Vercel team slug (e.g. `rajs-projects-ab8ef4bc`). Allows `https://*-TEAM.vercel.app` previews without listing each deploy URL |
 | `HUD_WS_PATH` | No | `/ws/transcript` | WebSocket upgrade path |
 | `NODE_ENV` | No | `development` | `development` / `test` / `production` |
 
