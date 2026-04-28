@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Programmatic migration runner.
- * Reads DATABASE_URL from the environment and executes each .sql file in
- * migrations/ in lexicographic order (001_, 002_, …).
- *
- * Usage:
- *   DATABASE_URL=postgres://… node migrations/run.js
- *   node migrations/run.js  # reads .env if dotenv is present
- */
 
 const fs = require("fs");
 const path = require("path");

@@ -90,7 +90,6 @@ export class HudSessionService {
 
     const signals = this.detectSignals(entry);
 
-    // S-10: Run signal saves, session fetch, and recent transcript fetch in parallel
     const signalSaves = signals.map((signal) =>
       this.sessions.saveEvent(
         this.createEvent(input.sessionId, "signal:detected", {

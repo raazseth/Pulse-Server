@@ -5,7 +5,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from "@/internal/pkg/logger";
 import { PromptSuggestion, SessionContext, TranscriptEntry } from "@/internal/domain/hud/model/hud.model";
 
-// S-15: Validate AI response shape at runtime
 const SuggestionArraySchema = z.array(
   z.object({ title: z.string(), text: z.string() }),
 );
@@ -46,7 +45,6 @@ function buildSuggestions(
   }));
 }
 
-// S-05: Timeout (10 s) configured at SDK level via constructor
 export class OpenAIProvider implements AIProvider {
   private readonly client: OpenAI;
   private readonly fallback = new RuleBasedAIProvider();
@@ -79,7 +77,6 @@ export class OpenAIProvider implements AIProvider {
       const raw = response.choices[0]?.message?.content;
       if (!raw) throw new Error("Empty OpenAI response");
 
-      // S-15: Validate shape before consuming
       const result = SuggestionArraySchema.safeParse(JSON.parse(raw));
       if (!result.success) throw new Error("Invalid OpenAI response shape");
 
@@ -91,8 +88,6 @@ export class OpenAIProvider implements AIProvider {
   }
 }
 
-// S-03: API key passed via SDK constructor (not URL query string)
-// S-05: Timeout passed via requestOptions on each call
 export class GeminiProvider implements AIProvider {
   private readonly client: GoogleGenerativeAI;
   private readonly fallback = new RuleBasedAIProvider();
@@ -134,7 +129,6 @@ export class GeminiProvider implements AIProvider {
       const raw = result.response.text();
       if (!raw) throw new Error("Empty Gemini response");
 
-      // S-15: Validate shape before consuming
       const parsed = SuggestionArraySchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new Error("Invalid Gemini response shape");
 

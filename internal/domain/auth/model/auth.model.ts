@@ -6,8 +6,8 @@ export interface AuthUser {
 }
 
 export interface TokenPair {
-  accessToken: string;   // JWT, 15 min
-  refreshToken: string;  // JWT, 7 days, stored in DB for revocation
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface AccessTokenPayload {

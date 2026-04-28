@@ -4,7 +4,6 @@ const isProduction = process.env.NODE_ENV === "production";
 
 let repo: LogRepository | null = null;
 
-/** Call once the DB pool is ready. All subsequent log calls will also persist to app_logs. */
 export function setLogRepository(r: LogRepository): void {
   repo = r;
 }

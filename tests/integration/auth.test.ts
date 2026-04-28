@@ -3,7 +3,6 @@ import { createTestApp, getTestDatabaseUrl } from "@/tests/helpers/createTestApp
 import { makeRegisterPayload } from "@/tests/factories/auth.factory";
 
 if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
-  // eslint-disable-next-line no-console
   console.warn("Skipping auth integration tests — set TEST_DATABASE_URL to run them");
 }
 
@@ -41,7 +40,6 @@ describe("POST /api/v1/auth/register", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.user.email.toLowerCase()).toBe(payload.email.toLowerCase());
     expect(res.body.data.tokens.accessToken).toBeTruthy();
-    // S-14: refreshToken is now an httpOnly cookie, not in the response body
     expect(res.body.data.tokens.refreshToken).toBeUndefined();
     expect(res.headers["set-cookie"]).toBeDefined();
   });
@@ -64,7 +62,6 @@ describe("POST /api/v1/auth/register", () => {
     expect(res.body.success).toBe(false);
   });
 
-  // S-09: duplicate email returns 409 CONFLICT (handler already does this)
   it("returns 409 on duplicate email", async () => {
     const payload = makeRegisterPayload();
     await agent.post("/api/v1/auth/register").send(payload).expect(201);
@@ -107,7 +104,6 @@ describe("POST /api/v1/auth/login", () => {
 });
 
 describe("POST /api/v1/auth/refresh", () => {
-  // S-14: refresh reads from httpOnly cookie — agent persists it automatically
   it("returns a new access token using the cookie set during register", async () => {
     const freshAgent = makeAgent();
     await freshAgent.post("/api/v1/auth/register").send(makeRegisterPayload()).expect(201);
@@ -162,7 +158,6 @@ describe("GET /api/v1/auth/me", () => {
 
     expect(res.body.success).toBe(true);
     expect(res.body.data.email.toLowerCase()).toBe(payload.email.toLowerCase());
-    // S-08: me() now returns the full profile from DB
     expect(res.body.data.name).toBeTruthy();
     expect(res.body.data.createdAt).toBeTruthy();
   });

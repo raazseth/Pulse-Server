@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock the Gemini SDK before importing the provider that uses it
 vi.mock("@google/generative-ai");
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -94,10 +93,6 @@ describe("RuleBasedAIProvider", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// GeminiProvider — uses @google/generative-ai SDK (mocked at module level)
-// ---------------------------------------------------------------------------
-
 describe("GeminiProvider", () => {
   const sessionId = "sess-gemini-test";
 
@@ -105,7 +100,6 @@ describe("GeminiProvider", () => {
   const mockGetGenerativeModel = vi.fn();
 
   beforeEach(() => {
-    // Must be a regular function — arrow functions cannot be called with `new`
     vi.mocked(GoogleGenerativeAI).mockImplementation(function (this: Record<string, unknown>) {
       this.getGenerativeModel = mockGetGenerativeModel.mockReturnValue({
         generateContent: mockGenerateContent,
@@ -179,7 +173,6 @@ describe("GeminiProvider", () => {
       context: { role: "Engineering Manager", notes: "Focus on team dynamics" },
     });
 
-    // systemInstruction is set on getGenerativeModel, not on generateContent
     const modelOptions = mockGetGenerativeModel.mock.calls[0][0] as {
       systemInstruction: string;
     };

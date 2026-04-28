@@ -75,7 +75,6 @@ async function main() {
     });
   });
 
-  // Must run before the readiness gate: OPTIONS and 503 responses still need CORS headers.
   app.use("/api/v1", pulseCors);
 
   app.use((req, res, next) => {

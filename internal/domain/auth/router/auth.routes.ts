@@ -11,7 +11,6 @@ export function AuthRoutes(handler: AuthHandler, authService: AuthService): Rout
 
   router.post("/register", validateBody(RegisterSchema), handler.register);
   router.post("/login", validateBody(LoginSchema), handler.login);
-  // S-14: refresh token comes from httpOnly cookie — no body schema needed
   router.post("/refresh", handler.refresh);
   router.delete("/logout", handler.logout);
   router.get("/me", authenticate, handler.me);

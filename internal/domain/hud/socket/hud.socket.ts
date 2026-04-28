@@ -48,11 +48,9 @@ function sendError(socket: WebSocket, message: string) {
   try {
     socket.send(JSON.stringify({ type: "error", payload: { message } }));
   } catch {
-    // socket may already be closed
   }
 }
 
-// S-01: authService parameter added — JWT verified before upgrade handshake
 export function initHudSocket(
   server: http.Server,
   hudService: HudSessionService,
@@ -66,7 +64,6 @@ export function initHudSocket(
     const requestUrl = new URL(request.url ?? "", "http://localhost");
     if (requestUrl.pathname !== config.hud.wsPath) return;
 
-    // S-01: Reject connections without a valid JWT before completing the handshake
     const token = requestUrl.searchParams.get("token");
     if (!token) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -105,7 +102,6 @@ export function initHudSocket(
     try {
       socket.send(JSON.stringify({ type: "connection:ready" }));
     } catch {
-      // socket may have closed immediately
     }
 
     socket.on("message", async (rawMessage: WebSocket.RawData) => {
@@ -148,7 +144,6 @@ async function handleMessage(
     try {
       socket.send(JSON.stringify({ type: "session:state", payload: snapshot }));
     } catch {
-      // socket may have closed between subscribe and send
     }
     return;
   }

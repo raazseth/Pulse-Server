@@ -5,7 +5,6 @@ import SC from "@/internal/pkg/response";
 import { AuthService } from "@/internal/domain/auth/service/auth.service";
 
 const isProduction = process.env.NODE_ENV === "production";
-/** Strict blocks cross-site cookies; SPA on Vercel + API on Cloud Run needs None+Secure. */
 const REFRESH_COOKIE_SAMESITE = isProduction ? ("none" as const) : ("lax" as const);
 
 const COOKIE_OPTS = {
@@ -28,7 +27,6 @@ function clearRefreshCookie(res: Response) {
 export class AuthHandler {
   constructor(private readonly authService: AuthService) {}
 
-  // S-09: Removed duplicate validation — Zod middleware already enforces these
   register = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, password, name } = req.body as {
@@ -39,7 +37,6 @@ export class AuthHandler {
 
       const result = await this.authService.register(email, password, name);
 
-      // S-14: refreshToken lives in httpOnly cookie, not response body
       res.cookie("refreshToken", result.tokens.refreshToken, COOKIE_OPTS);
       res.status(SC.CREATED).json(
         created(
@@ -61,7 +58,6 @@ export class AuthHandler {
 
       const result = await this.authService.login(email, password);
 
-      // S-14: refreshToken lives in httpOnly cookie, not response body
       res.cookie("refreshToken", result.tokens.refreshToken, COOKIE_OPTS);
       res.status(SC.OK).json(
         ok(
@@ -74,7 +70,6 @@ export class AuthHandler {
     }
   };
 
-  // S-14: Read refresh token from httpOnly cookie, set rotated cookie in response
   refresh = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const refreshToken = (req.cookies as Record<string, string>)?.refreshToken;
@@ -94,7 +89,6 @@ export class AuthHandler {
     }
   };
 
-  // S-14: Revoke cookie-based refresh token and clear the cookie
   logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const refreshToken = (req.cookies as Record<string, string>)?.refreshToken;
@@ -108,7 +102,6 @@ export class AuthHandler {
     }
   };
 
-  // S-08: Fetch full user profile from DB instead of returning the JWT stub
   me = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = await this.authService.getUserById(req.user!.userId);

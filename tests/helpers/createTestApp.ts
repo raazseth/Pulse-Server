@@ -34,8 +34,6 @@ export function getTestDatabaseUrl(): string {
   return url;
 }
 
-// S-17: Mint a short-lived JWT signed with the app secret — used to authenticate
-// integration test requests to protected HUD routes without a real DB user.
 export function makeAuthHeader(
   userId: string = randomUUID(),
   email: string = "test@pulse.dev",
@@ -53,8 +51,6 @@ export async function createTestApp() {
   app.use("/api/v1", router);
   app.use(errorHandler);
 
-  // Use request.agent so cookies are automatically persisted between requests
-  // within the same test session (required for httpOnly refresh-token flow).
   const agent = request.agent(app);
   const makeAgent = () => request.agent(app);
 

@@ -10,7 +10,6 @@ interface AudioBackend {
   transcribe(audio: Buffer, mimeType: string, lang: string): Promise<string>;
 }
 
-/** Strip codecs/parameters — Whisper rejects types like `audio/webm;codecs=opus` on the file part. */
 function normalizeAudioMimeType(contentType: string | undefined): string {
   const raw = (contentType ?? "audio/webm").split(";")[0].trim().toLowerCase();
   const allowed = new Set([
@@ -91,14 +90,12 @@ export class AudioHandler {
     const prefer = aiProvider?.toLowerCase();
 
     if (prefer === "gemini") {
-      // Explicit Gemini preference — use Gemini first, Whisper as fallback if key exists.
       this.primary = geminiApiKey ? new GeminiAudioBackend(geminiApiKey) : null;
       this.fallback = openaiApiKey ? new WhisperBackend(openaiApiKey) : null;
     } else if (prefer === "openai") {
       this.primary = openaiApiKey ? new WhisperBackend(openaiApiKey) : null;
       this.fallback = geminiApiKey ? new GeminiAudioBackend(geminiApiKey) : null;
     } else {
-      // Auto: prefer whichever key is present; if both, Whisper first.
       this.primary = openaiApiKey
         ? new WhisperBackend(openaiApiKey)
         : geminiApiKey

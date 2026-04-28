@@ -44,7 +44,6 @@ export async function createApp(options?: { databaseUrl?: string; skipRateLimiti
   await logRepo.initialize();
   setLogRepository(logRepo);
 
-  // Delete expired log rows once per day.
   const LOG_CLEANUP_MS = 6 * 60 * 60 * 1000;
   setInterval(async () => {
     const deleted = await logRepo.deleteExpired().catch(() => 0);

@@ -39,9 +39,7 @@ export class LogRepository {
          VALUES ($1, $2, $3, $4)`,
         [level, message, stack ?? null, expiresAt.toISOString()],
       )
-      .catch(() => {
-        // Never throw from a log write — swallow DB errors silently.
-      });
+      .catch(() => {});
   }
 
   async deleteExpired(): Promise<number> {

@@ -3,7 +3,6 @@ import { createTestApp, makeAuthHeader } from "@/tests/helpers/createTestApp";
 import { makeSessionId, makeTranscriptChunk, makeTag, makeContext } from "@/tests/factories/hud.factory";
 
 if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
-  // eslint-disable-next-line no-console
   console.warn("Skipping HUD integration tests — set TEST_DATABASE_URL to run them");
 }
 
@@ -13,7 +12,6 @@ type TestAgent = Awaited<ReturnType<typeof createTestApp>>["agent"];
 
 let agent: TestAgent;
 let pg: import("pg").Pool | undefined;
-// S-17: shared auth header — all HUD routes require authentication
 let authHeader: string;
 
 beforeAll(async () => {

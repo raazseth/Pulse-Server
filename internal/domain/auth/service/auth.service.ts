@@ -16,7 +16,6 @@ const ACCESS_TTL = "15m";
 const REFRESH_TTL = "7d";
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// S-04: Runtime Zod validation for JWT payloads
 const AccessTokenPayloadSchema = z.object({
   userId: z.string().uuid(),
   email: z.string().email(),
@@ -72,7 +71,6 @@ export class AuthService {
   async refreshAccessToken(oldRefreshToken: string): Promise<{ accessToken: string; refreshToken: string; user: AuthUser }> {
     let payload: RefreshTokenPayload;
     try {
-      // S-04: Validate shape at runtime instead of blind cast
       payload = RefreshTokenPayloadSchema.parse(
         jwt.verify(oldRefreshToken, config.auth.jwtRefreshSecret),
       );
@@ -115,17 +113,14 @@ export class AuthService {
       );
       await this.authRepo.deleteRefreshToken(payload.tokenId);
     } catch {
-      // already invalid — nothing to revoke
     }
   }
 
-  // S-04: Validate JWT payload shape at runtime
   verifyAccessToken(token: string): AccessTokenPayload {
     const raw = jwt.verify(token, config.auth.jwtSecret);
     return AccessTokenPayloadSchema.parse(raw);
   }
 
-  // S-08: Expose full user profile for GET /auth/me
   async getUserById(userId: string): Promise<AuthUser | null> {
     return this.authRepo.findUserById(userId);
   }

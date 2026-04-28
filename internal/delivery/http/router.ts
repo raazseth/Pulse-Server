@@ -76,7 +76,6 @@ export function createRouter(
   }));
   router.use(express.json({ limit: "1mb" }));
   router.use(express.urlencoded({ extended: true, limit: "1mb" }));
-  // S-16: cookie-parser required for httpOnly refresh-token cookies
   router.use(cookieParser());
 
   router.get("/health", (_req, res) => {
@@ -102,11 +101,9 @@ export function createRouter(
 
   router.use("/auth", authLimiter, AuthRoutes(new AuthHandler(authService), authService));
 
-  // S-07: transcriptLimiter registered BEFORE HudRoutes so it actually runs
   router.use("/hud/sessions/:sessionId/transcript", transcriptLimiter);
   router.use("/hud", HudRoutes(new HudHandler(hudService), authenticate as RequestHandler));
 
-  // S-02: audio route now requires authentication
   const audioHandler = new AudioHandler(config.hud.openaiApiKey, config.hud.geminiApiKey, config.hud.aiProvider);
   router.post(
     "/hud/audio/transcribe",

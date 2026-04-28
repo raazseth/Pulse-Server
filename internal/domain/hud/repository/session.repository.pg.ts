@@ -318,8 +318,6 @@ export class PostgresSessionRepository implements SessionRepository {
     const session = await this.getSession(sessionId);
     if (!session) return null;
 
-    // S-06: listSignals was calling listEvents internally — derive signals from the
-    // already-fetched events array to avoid a duplicate DB query.
     const [transcriptEntries, tags, prompts, events] = await Promise.all([
       this.listTranscriptEntries(sessionId),
       this.listTags(sessionId),

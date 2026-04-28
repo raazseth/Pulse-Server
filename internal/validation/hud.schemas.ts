@@ -18,8 +18,6 @@ export const UpdateContextSchema = z.object({
   context: z.record(z.string(), z.string()),
 });
 
-// ─── Session CRUD ─────────────────────────────────────────────────────────────
-
 export const CreateSessionSchema = z.object({
   title: z.string().min(1, "title is required").max(200, "title is too long"),
   facilitator: z.string().max(100).optional(),
@@ -28,15 +26,11 @@ export const CreateSessionSchema = z.object({
   notes: z.string().max(5_000).optional(),
 });
 
-// "ended" → "active" is an illegal transition; enforced in the service layer.
 export const UpdateSessionStatusSchema = z.object({
   status: z.enum(["active", "paused", "ended"]),
 });
 
-// ─── Notes ────────────────────────────────────────────────────────────────────
-
 export const CreateNoteSchema = z.object({
-  /** Empty body is allowed so the client can create a stub row and edit immediately. */
   body: z.string().max(10_000, "body is too long").default(""),
   transcriptId: z.string().uuid("transcriptId must be a valid UUID").optional(),
 });
@@ -44,8 +38,6 @@ export const CreateNoteSchema = z.object({
 export const UpdateNoteSchema = z.object({
   body: z.string().min(1, "body is required").max(10_000, "body is too long"),
 });
-
-// ─── AI Prompts ───────────────────────────────────────────────────────────────
 
 export const UpdatePromptSchema = z
   .object({
@@ -57,13 +49,9 @@ export const UpdatePromptSchema = z
     { message: "At least one of 'dismissed' or 'used' must be provided" },
   );
 
-// ─── Note-Tag Linking ─────────────────────────────────────────────────────────
-
 export const AddTagToNoteSchema = z.object({
   tagId: z.string().uuid("tagId must be a valid UUID"),
 });
-
-// ─── Inferred types ───────────────────────────────────────────────────────────
 
 export type TranscriptChunkInput     = z.infer<typeof TranscriptChunkSchema>;
 export type CreateTagInput           = z.infer<typeof CreateTagSchema>;

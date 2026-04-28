@@ -19,8 +19,6 @@ import {
 export class HudHandler {
   constructor(private readonly service: HudSessionService) {}
 
-  // ─── Session CRUD ────────────────────────────────────────────────────────────
-
   createSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.userId;
@@ -104,8 +102,6 @@ export class HudHandler {
     }
   };
 
-  // ─── Transcript & Tags ───────────────────────────────────────────────────────
-
   createTranscriptChunk = async (
     req: Request,
     res: Response,
@@ -167,8 +163,6 @@ export class HudHandler {
     }
   };
 
-  // ─── Notes ───────────────────────────────────────────────────────────────────
-
   createNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
@@ -213,12 +207,9 @@ export class HudHandler {
     }
   };
 
-  // ─── AI Prompts ──────────────────────────────────────────────────────────────
-
   listPrompts = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
-      // TODO: implement
       res.status(SC.OK).json(ok({ sessionId, prompts: [] }, "Prompts fetched"));
     } catch (error) {
       next(error);
@@ -230,14 +221,11 @@ export class HudHandler {
       const sessionId = this.requireSessionId(req);
       const promptId = this.requirePromptId(req);
       const { dismissed, used } = req.body as UpdatePromptInput;
-      // TODO: implement
       res.status(SC.OK).json(ok({ sessionId, promptId, dismissed, used }, "Prompt updated"));
     } catch (error) {
       next(error);
     }
   };
-
-  // ─── Note-Tag Linking ────────────────────────────────────────────────────────
 
   addTagToNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -262,8 +250,6 @@ export class HudHandler {
       next(error);
     }
   };
-
-  // ─── Private helpers ─────────────────────────────────────────────────────────
 
   private requireSessionId(req: Request) {
     const sessionId = req.params.sessionId;

@@ -47,7 +47,6 @@ export class HudConnectionManager {
         try {
           socket.send(payload);
         } catch {
-          // socket closed between readyState check and send
         }
       }
     }
