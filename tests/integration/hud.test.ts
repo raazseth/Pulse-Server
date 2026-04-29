@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp, makeAuthHeader } from "@/tests/helpers/createTestApp";
 import { makeSessionId, makeTranscriptChunk, makeTag, makeContext } from "@/tests/factories/hud.factory";
@@ -108,8 +109,8 @@ describe("POST /api/v1/hud/sessions/:sessionId/transcript", () => {
 
 describe("GET /api/v1/hud/sessions", () => {
   it("returns only sessions created by the authenticated user", async () => {
-    const userA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
-    const userB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const userA = randomUUID();
+    const userB = randomUUID();
     const headerA = makeAuthHeader(userA, "a@pulse.test");
     const headerB = makeAuthHeader(userB, "b@pulse.test");
 
@@ -138,7 +139,7 @@ describe("GET /api/v1/hud/sessions", () => {
 });
 
 describe("GET /api/v1/hud/sessions/:sessionId", () => {
-  it("returns the session snapshot after adding data", async () => {
+  it("returns session metadata after transcript data exists", async () => {
     const sessionId = makeSessionId();
     await agent
       .post(`/api/v1/hud/sessions/${sessionId}/transcript`)
@@ -152,19 +153,17 @@ describe("GET /api/v1/hud/sessions/:sessionId", () => {
       .expect(200);
 
     expect(res.body.success).toBe(true);
-    expect(res.body.data.session.id).toBe(sessionId);
-    expect(res.body.data.transcriptEntries.length).toBeGreaterThan(0);
+    expect(res.body.data.id).toBe(sessionId);
   });
 
-  it("returns an empty session for an unknown sessionId", async () => {
+  it("returns 404 when the session row does not exist", async () => {
     const sessionId = makeSessionId();
     const res = await agent
       .get(`/api/v1/hud/sessions/${sessionId}`)
       .set("Authorization", authHeader)
-      .expect(200);
+      .expect(404);
 
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.transcriptEntries).toEqual([]);
+    expect(res.body.success).toBe(false);
   });
 
   it("returns 401 without an auth token", async () => {
@@ -212,14 +211,14 @@ describe("POST /api/v1/hud/sessions/:sessionId/tags", () => {
     expect(res.body.success).toBe(false);
   });
 
-  it("returns 422 when transcriptId is not a UUID", async () => {
+  it("returns 404 when transcriptId does not match a line in the session", async () => {
     const sessionId = makeSessionId();
 
     const res = await agent
       .post(`/api/v1/hud/sessions/${sessionId}/tags`)
       .set("Authorization", authHeader)
-      .send({ label: "valid label", transcriptId: "not-a-uuid" })
-      .expect(422);
+      .send({ label: "valid label", transcriptId: "missing-line-id" })
+      .expect(404);
 
     expect(res.body.success).toBe(false);
   });

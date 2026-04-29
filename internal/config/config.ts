@@ -51,6 +51,12 @@ const SERVER_HOST = process.env.HOST?.trim() || "0.0.0.0";
 const HUD_WS_PATH = process.env.HUD_WS_PATH || "/ws/transcript";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+const OPENAI_TIMEOUT_MS_RAW = process.env.OPENAI_TIMEOUT_MS;
+const OPENAI_TIMEOUT_MS = (() => {
+  const n = Number(OPENAI_TIMEOUT_MS_RAW);
+  if (!Number.isFinite(n) || n < 3000 || n > 60_000) return 7000;
+  return Math.floor(n);
+})();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 const AI_PROVIDER = process.env.AI_PROVIDER;
@@ -81,6 +87,7 @@ export const config = {
     wsPath: HUD_WS_PATH,
     openaiApiKey: OPENAI_API_KEY,
     openaiModel: OPENAI_MODEL,
+    openaiTimeoutMs: OPENAI_TIMEOUT_MS,
     geminiApiKey: GEMINI_API_KEY,
     geminiModel: GEMINI_MODEL,
     aiProvider: AI_PROVIDER,

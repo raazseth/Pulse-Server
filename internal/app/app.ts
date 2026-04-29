@@ -13,24 +13,34 @@ import { LogRepository } from "@/internal/pkg/log-repository";
 
 function resolveAIProvider(): AIProvider {
   const explicit = config.hud.aiProvider?.trim().toLowerCase();
-  const openaiOpts = { model: config.hud.openaiModel };
+  const openaiOpts = {
+    model: config.hud.openaiModel,
+    timeoutMs: config.hud.openaiTimeoutMs,
+  };
 
-  if (explicit === "openai") {
-    if (!config.hud.openaiApiKey) throw new Error("AI_PROVIDER=openai requires OPENAI_API_KEY");
-    return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
+  const openaiKey = config.hud.openaiApiKey?.trim();
+  const geminiKey = config.hud.geminiApiKey?.trim();
+
+  if (explicit === "openai" && !openaiKey) {
+    throw new Error("AI_PROVIDER=openai requires OPENAI_API_KEY");
   }
 
-  if (config.hud.openaiApiKey) {
-    return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
+  // OpenAI whenever the key is set — must run before any AI_PROVIDER=gemini check (.env.local often sets gemini).
+  if (openaiKey) {
+    if (explicit === "gemini") {
+      logger.warn(
+        "HUD AI ▸ OPENAI_API_KEY is set — using OpenAI (AI_PROVIDER=gemini ignored). Remove OPENAI_API_KEY to use Gemini.",
+      );
+    }
+    return new OpenAIProvider(openaiKey, openaiOpts);
   }
 
-  if (explicit === "gemini") {
-    if (!config.hud.geminiApiKey) throw new Error("AI_PROVIDER=gemini requires GEMINI_API_KEY");
-    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
+  if (explicit === "gemini" && !geminiKey) {
+    throw new Error("AI_PROVIDER=gemini requires GEMINI_API_KEY (or set OPENAI_API_KEY for OpenAI)");
   }
 
-  if (config.hud.geminiApiKey) {
-    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
+  if (geminiKey) {
+    return new GeminiProvider(geminiKey, { modelId: config.hud.geminiModel });
   }
 
   return new RuleBasedAIProvider();
@@ -65,18 +75,27 @@ export async function createApp(options?: { databaseUrl?: string; skipRateLimiti
   const authService = new AuthService(authRepo);
 
   const aiProvider = resolveAIProvider();
-  const aiLabel = aiProvider instanceof GeminiProvider ? `Gemini (${config.hud.geminiModel})`
-    : aiProvider instanceof OpenAIProvider ? `OpenAI (${config.hud.openaiModel})`
-    : "rule-based";
+  const explicitProvider = config.hud.aiProvider?.trim() || "";
+  const hasOpenaiKey = Boolean(config.hud.openaiApiKey?.trim());
+  const hasGeminiKey = Boolean(config.hud.geminiApiKey?.trim());
 
-  if (aiProvider instanceof GeminiProvider) {
-    logger.info(
-      `HUD AI ▸ Gemini endpoint host/path: generativelanguage.googleapis.com/v1beta/models/${config.hud.geminiModel}:generateContent`,
-    );
-  }
+  let aiLine: string;
   if (aiProvider instanceof OpenAIProvider) {
-    logger.info(`HUD AI ▸ OpenAI chat.completions model: ${config.hud.openaiModel}`);
+    const why =
+      explicitProvider.toLowerCase() === "openai"
+        ? "AI_PROVIDER=openai"
+        : "OPENAI_API_KEY set (primary)";
+    aiLine = `OpenAI · model ${config.hud.openaiModel} · ${why}`;
+  } else if (aiProvider instanceof GeminiProvider) {
+    const why = !hasOpenaiKey && hasGeminiKey ? "no OPENAI_API_KEY, using GEMINI_API_KEY" : "fallback";
+    aiLine = `Gemini · model ${config.hud.geminiModel} · ${why}`;
+  } else {
+    aiLine = "rule-based patterns (no OPENAI_API_KEY or GEMINI_API_KEY)";
   }
+
+  logger.info(
+    `Pulse HUD ready — storage: postgres | auth: postgres | suggestions: ${aiLine}`,
+  );
 
   const hudService = new HudSessionService(
     sessionRepository,
@@ -85,8 +104,6 @@ export async function createApp(options?: { databaseUrl?: string; skipRateLimiti
   );
 
   const router = createRouter(hudService, authService, { skipRateLimiting: options?.skipRateLimiting });
-
-  logger.info(`Pulse HUD ready — storage: postgres | auth: postgres | ai: ${aiLabel}`);
 
   return { router, hudService, authService, pg };
 }

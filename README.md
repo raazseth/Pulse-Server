@@ -3,6 +3,12 @@
 Express + Node.js backend for the Pulse HUD real-time interview system.
 REST API + WebSocket, Postgres storage, JWT auth, OpenAI (ChatGPT API) as the primary suggestion model with Gemini as an optional fallback when no OpenAI key is set.
 
+**WebSocket scaling:** `HudConnectionManager` broadcasts are in-process. Treat this as a **single-node** (or sticky-session) deployment unless you add a shared pub/sub for cross-instance fan-out.
+
+**AI providers:** Suggestions are wired for **OpenAI** and **Gemini** only (no Anthropic adapter).
+
+**Signals:** `signal:detected` entries are **lexical heuristics** on transcript text, not RMS/VAD or model sentiment on decoded audio.
+
 ---
 
 ## Table of Contents

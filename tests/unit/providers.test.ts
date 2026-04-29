@@ -1,18 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { GeminiProvider, RuleBasedAIProvider } from "@/internal/domain/hud/service/ai.provider";
+import {
+  buildRoleTranscriptDigests,
+  GeminiProvider,
+  RuleBasedAIProvider,
+} from "@/internal/domain/hud/service/ai.provider";
 import { DefaultTranscriptProvider } from "@/internal/domain/hud/service/transcript.provider";
 import { TranscriptEntry } from "@/internal/domain/hud/model/hud.model";
 
-function makeEntry(text: string, id?: string): TranscriptEntry {
+function makeEntry(text: string, id?: string, speakerId = "interviewee"): TranscriptEntry {
   return {
     id: id ?? crypto.randomUUID(),
     sessionId: "test-session",
     text,
-    speakerId: "interviewer",
+    speakerId,
     timestamp: new Date().toISOString(),
   };
 }
+
+describe("buildRoleTranscriptDigests", () => {
+  it("splits interviewer vs interviewee lines and includes entry ids", () => {
+    const a = makeEntry("Hello from call", "id-a", "system");
+    const b = makeEntry("My answer", "id-b", "interviewee");
+    const { interviewer, interviewee } = buildRoleTranscriptDigests([a, b]);
+    expect(interviewer).toContain("[id=id-a]");
+    expect(interviewer).toContain("Hello from call");
+    expect(interviewee).toContain("[id=id-b]");
+    expect(interviewee).toContain("My answer");
+  });
+});
 
 describe("RuleBasedAIProvider", () => {
   const provider = new RuleBasedAIProvider();
@@ -299,14 +315,14 @@ describe("DefaultTranscriptProvider", () => {
     expect(entry.id).toBeTruthy();
   });
 
-  it("defaults speakerId to 'speaker-1' when not provided", () => {
+  it("defaults speakerId to 'interviewee' when not provided", () => {
     const entry = provider.normalizeChunk({ sessionId, text: "Some text" });
-    expect(entry.speakerId).toBe("speaker-1");
+    expect(entry.speakerId).toBe("interviewee");
   });
 
-  it("defaults speakerId to 'speaker-1' for blank speakerId", () => {
+  it("defaults speakerId to 'interviewee' for blank speakerId", () => {
     const entry = provider.normalizeChunk({ sessionId, text: "Some text", speakerId: "   " });
-    expect(entry.speakerId).toBe("speaker-1");
+    expect(entry.speakerId).toBe("interviewee");
   });
 
   it("uses provided timestamp", () => {

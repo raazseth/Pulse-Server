@@ -11,6 +11,8 @@ import { transcriptionService } from "@/internal/domain/hud/service/transcriptio
 import { HudConnectionManager } from "./hud.connection-manager";
 
 const MAX_CONNECTIONS_PER_IP = 10;
+const MAX_WS_MESSAGE_CHARS = 2_200_000;
+const socketUserId = new WeakMap<WebSocket, string>();
 
 const SubscribeSchema = z.object({
   sessionId: z.string().min(1).max(200),
@@ -27,7 +29,7 @@ const ChunkSchema = z.object({
 const TagSchema = z.object({
   sessionId: z.string().min(1).max(200),
   label: z.string().min(1).max(200),
-  transcriptId: z.string().uuid().optional(),
+  transcriptId: z.string().min(1).max(200).optional(),
   createdBy: z.string().max(100).optional(),
   metadata: z.record(z.string(), z.string().max(500)).optional(),
 });
@@ -82,8 +84,9 @@ export function initHudSocket(
       socket.destroy();
       return;
     }
+    let authedUserId: string;
     try {
-      authService.verifyAccessToken(token);
+      authedUserId = authService.verifyAccessToken(token).userId;
     } catch {
       logger.warn("WS auth: rejected connection with invalid token");
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -100,6 +103,7 @@ export function initHudSocket(
     }
 
     wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+      socketUserId.set(ws, authedUserId);
       connectionsByIp.set(ip, (connectionsByIp.get(ip) ?? 0) + 1);
       ws.once("close", () => {
         const next = (connectionsByIp.get(ip) ?? 1) - 1;
@@ -117,9 +121,15 @@ export function initHudSocket(
     }
 
     socket.on("message", async (rawMessage: WebSocket.RawData) => {
+      const raw = rawMessage.toString();
+      if (raw.length > MAX_WS_MESSAGE_CHARS) {
+        sendError(socket, "Message too large");
+        return;
+      }
+
       let parsed: unknown;
       try {
-        parsed = JSON.parse(rawMessage.toString());
+        parsed = JSON.parse(raw);
       } catch {
         sendError(socket, "Invalid JSON");
         return;
@@ -131,8 +141,14 @@ export function initHudSocket(
         return;
       }
 
+      const userId = socketUserId.get(socket);
+      if (!userId) {
+        sendError(socket, "Unauthorized");
+        return;
+      }
+
       try {
-        await handleMessage(result.data, socket, manager, hudService);
+        await handleMessage(result.data, socket, manager, hudService, userId);
       } catch (error) {
         sendError(socket, error instanceof Error ? error.message : "Unexpected socket error");
       }
@@ -152,7 +168,6 @@ function isWhisperHallucination(text: string): boolean {
   if (!t) return true;
   if (t.length < 3) return true;
   if (HALLUCINATION_RE.test(t)) return true;
-  // Repetition: "you you you" or "the the the" – common silence artefact
   const words = t.split(/\s+/);
   if (words.length >= 3 && new Set(words).size === 1) return true;
   return false;
@@ -163,8 +178,10 @@ async function handleMessage(
   socket: WebSocket,
   manager: HudConnectionManager,
   hudService: HudSessionService,
+  userId: string,
 ) {
   if (message.type === "session:subscribe") {
+    await hudService.assertUserCanAccessSession(userId, message.payload.sessionId);
     manager.subscribe(socket, message.payload.sessionId);
     const snapshot = await hudService.getSessionSnapshot(message.payload.sessionId);
     try {
@@ -175,17 +192,34 @@ async function handleMessage(
   }
 
   if (message.type === "transcript:chunk") {
-    const result = await hudService.processTranscriptChunk(message.payload);
-    manager.broadcast(message.payload.sessionId, { type: "transcript:chunk", payload: result.entry });
-    manager.broadcast(message.payload.sessionId, { type: "prompt:update", payload: result.prompts });
-    if (result.signals.length) {
-      manager.broadcast(message.payload.sessionId, { type: "signal:detected", payload: result.signals });
+    const { sessionId } = message.payload;
+    await hudService.assertUserCanAccessSession(userId, sessionId);
+    const ingest = await hudService.ingestTranscriptChunk(message.payload);
+    manager.broadcast(sessionId, { type: "transcript:chunk", payload: ingest.entry });
+    if (ingest.signals.length) {
+      manager.broadcast(sessionId, { type: "signal:detected", payload: ingest.signals });
+    }
+    if (ingest.isInterviewee) {
+      void hudService
+        .runIntervieweeSuggestionGeneration(sessionId, ingest.entry.speakerId, ingest.mergedContext)
+        .then((prompts) => {
+          manager.broadcast(sessionId, { type: "AI_SUGGESTION", payload: prompts });
+          manager.broadcast(sessionId, { type: "prompt:update", payload: prompts });
+        })
+        .catch((err) => {
+          logger.error(
+            `transcript:chunk interviewee AI: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    } else {
+      manager.broadcast(sessionId, { type: "prompt:update", payload: ingest.existingPrompts });
     }
     return;
   }
 
   if (message.type === "audio:chunk") {
     const { sessionId, audio, mimeType, speakerId, lang, context } = message.payload;
+    await hudService.assertUserCanAccessSession(userId, sessionId);
     const audioBuffer = Buffer.from(audio, "base64");
     const rawLang = lang?.split("-")[0]?.toLowerCase() ?? "en";
     const normalizedLang = /^[a-z]{2,3}$/.test(rawLang) ? rawLang : "en";
@@ -217,34 +251,57 @@ async function handleMessage(
       return;
     }
 
-    const result = await hudService.processTranscriptChunk({ sessionId, text, speakerId, context });
+    const ingest = await hudService.ingestTranscriptChunk({
+      sessionId,
+      text,
+      speakerId: speakerId?.trim() || "system",
+      context,
+    });
 
-    // Named events per spec
     manager.broadcast(sessionId, {
       type: "TRANSCRIPT_FINAL",
-      payload: { ...result.entry, partialId },
+      payload: { ...ingest.entry, partialId },
     });
-    manager.broadcast(sessionId, {
-      type: "AI_SUGGESTION",
-      payload: result.prompts,
-    });
+    manager.broadcast(sessionId, { type: "transcript:chunk", payload: ingest.entry });
+    if (ingest.signals.length) {
+      manager.broadcast(sessionId, { type: "signal:detected", payload: ingest.signals });
+    }
 
-    // Legacy aliases kept for any client code still using the old names
-    manager.broadcast(sessionId, { type: "transcript:chunk", payload: result.entry });
-    manager.broadcast(sessionId, { type: "prompt:update", payload: result.prompts });
-    if (result.signals.length) {
-      manager.broadcast(sessionId, { type: "signal:detected", payload: result.signals });
+    if (ingest.isInterviewee) {
+      logger.info(
+        `HUD AI ▸ queue suggestions (audio) [session=${sessionId}] speakerId=${ingest.entry.speakerId} transcriptId=${ingest.entry.id}`,
+      );
+      void hudService
+        .runIntervieweeSuggestionGeneration(sessionId, ingest.entry.speakerId, ingest.mergedContext)
+        .then((prompts) => {
+          logger.info(
+            `HUD AI ▸ broadcast suggestions (audio) [session=${sessionId}] count=${prompts.length} transcriptId=${ingest.entry.id}`,
+          );
+          manager.broadcast(sessionId, { type: "AI_SUGGESTION", payload: prompts });
+          manager.broadcast(sessionId, { type: "prompt:update", payload: prompts });
+        })
+        .catch((err) => {
+          logger.error(
+            `audio:chunk interviewee AI: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    } else {
+      manager.broadcast(sessionId, { type: "prompt:update", payload: ingest.existingPrompts });
     }
     return;
   }
 
   if (message.type === "tag:create") {
-    const tag = await hudService.createTag(message.payload);
-    manager.broadcast(message.payload.sessionId, { type: "tag:created", payload: tag });
+    await hudService.assertUserCanAccessSession(userId, message.payload.sessionId);
+    const { tag, created: isNew } = await hudService.createTag(message.payload);
+    if (isNew) {
+      manager.broadcast(message.payload.sessionId, { type: "tag:created", payload: tag });
+    }
     return;
   }
 
   if (message.type === "session:context") {
+    await hudService.assertUserCanAccessSession(userId, message.payload.sessionId);
     const snapshot = await hudService.updateSessionContext(message.payload);
     manager.broadcast(message.payload.sessionId, { type: "session:state", payload: snapshot });
   }

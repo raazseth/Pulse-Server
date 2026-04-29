@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { created, ok } from "@/internal/pkg/ApiResponse";
-import { AppError } from "@/internal/pkg/AppError";
 import SC from "@/internal/pkg/response";
+import { AppError } from "@/internal/pkg/AppError";
 import { HudSessionService } from "@/internal/domain/hud/service/session.service";
 import {
   AddTagToNoteInput,
@@ -19,13 +19,19 @@ import {
 export class HudHandler {
   constructor(private readonly service: HudSessionService) {}
 
+  private requireHudUser(req: Request): string {
+    const userId = req.user?.userId;
+    if (!userId) throw new AppError("Authentication required", 0, SC.UNAUTHORIZED);
+    return userId;
+  }
+
   createSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?.userId;
       if (!userId) {
         return next(new AppError("Authentication required", 0, SC.UNAUTHORIZED));
       }
-      const { title, facilitator = '', audience = '', role = '' } = req.body as CreateSessionInput;
+      const { title = "Untitled Session", facilitator = '', audience = '', role = '' } = req.body as CreateSessionInput;
       const session = await this.service.createSession({
         id: randomUUID(),
         title,
@@ -48,8 +54,22 @@ export class HudHandler {
         return next(new AppError("Authentication required", 0, SC.UNAUTHORIZED));
       }
       const sessions = await this.service.listSessions(userId);
-      const summaries = sessions.map(s => ({ id: s.id, title: s.title, status: s.status, noteCount: s.noteCount ?? 0, createdAt: s.createdAt }));
-      res.status(SC.OK).json(ok(summaries, "Sessions fetched"));
+      const summaries = sessions.map((s) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        noteCount: s.noteCount ?? 0,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      }));
+      const lastActiveSession =
+        sessions.find((s) => s.status === "active") ?? sessions[0] ?? null;
+      const lastActiveSummary = lastActiveSession ? summaries.find((s) => s.id === lastActiveSession.id) ?? null : null;
+      res.status(SC.OK).json({
+        ...ok(summaries, "Sessions fetched"),
+        lastActiveSessionId: lastActiveSession?.id ?? null,
+        lastActiveSession: lastActiveSummary,
+      });
     } catch (error) {
       next(error);
     }
@@ -58,9 +78,10 @@ export class HudHandler {
   getSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
-      const session = await this.service.getSession(sessionId);
-      if (!session) throw new AppError('Session not found', 0, SC.NOT_FOUND);
-      res.status(SC.OK).json(ok({ id: session.id, title: session.title, status: session.status, createdAt: session.createdAt }, "Session fetched"));
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
+      const snapshot = await this.service.getSessionSnapshot(sessionId);
+      res.status(SC.OK).json(ok({ id: snapshot.session.id, ...snapshot }, "Session fetched"));
     } catch (error) {
       next(error);
     }
@@ -69,6 +90,8 @@ export class HudHandler {
   deleteSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       await this.service.deleteSession(sessionId);
       res.status(SC.OK).json(ok({ sessionId }, "Session deleted"));
     } catch (error) {
@@ -79,9 +102,11 @@ export class HudHandler {
   updateContext = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
       const { context } = req.body as UpdateContextInput;
       const snapshot = await this.service.updateSessionContext({
         sessionId,
+        userId,
         context,
       });
 
@@ -94,6 +119,8 @@ export class HudHandler {
   updateSessionStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const { status } = req.body as UpdateSessionStatusInput;
       await this.service.updateSessionStatus(sessionId, status);
       res.status(SC.OK).json(ok({ sessionId, status }, "Session status updated"));
@@ -105,6 +132,8 @@ export class HudHandler {
   startSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       await this.service.updateSessionStatus(sessionId, "active");
       res.status(SC.OK).json(ok({ sessionId, status: "active" }, "Session started"));
     } catch (error) {
@@ -115,6 +144,8 @@ export class HudHandler {
   stopSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       await this.service.updateSessionStatus(sessionId, "ended");
       res.status(SC.OK).json(ok({ sessionId, status: "ended" }, "Session stopped"));
     } catch (error) {
@@ -129,10 +160,12 @@ export class HudHandler {
   ) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
       const { text, speakerId, timestamp, context } = req.body as TranscriptChunkInput;
 
       const result = await this.service.processTranscriptChunk({
         sessionId,
+        userId,
         text,
         speakerId,
         timestamp,
@@ -150,17 +183,21 @@ export class HudHandler {
   createTag = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
       const { label, transcriptId, createdBy, metadata } = req.body as CreateTagInput;
 
-      const tag = await this.service.createTag({
+      const { tag, created: isNew } = await this.service.createTag({
         sessionId,
         label,
         transcriptId,
-        createdBy,
+        userId,
+        createdBy: createdBy ?? userId,
         metadata,
       });
 
-      res.status(SC.CREATED).json(created(tag, "Tag created"));
+      res
+        .status(isNew ? SC.CREATED : SC.OK)
+        .json(isNew ? created(tag, "Tag created") : ok(tag, "Tag already exists"));
     } catch (error) {
       next(error);
     }
@@ -169,6 +206,8 @@ export class HudHandler {
   exportSession = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const format = req.query.format === "csv" ? "csv" : "json";
       const result = await this.service.exportSession(sessionId, format);
 
@@ -186,6 +225,8 @@ export class HudHandler {
   createNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const { body, transcriptId } = req.body as CreateNoteInput;
       const note = await this.service.createNote({ id: randomUUID(), sessionId, label: '', body });
       res.status(SC.CREATED).json(created({ id: note.id, body: note.body, transcriptId }, "Note created"));
@@ -197,6 +238,8 @@ export class HudHandler {
   listNotes = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const notes = await this.service.listNotes(sessionId);
       res.status(SC.OK).json(ok(notes, "Notes fetched"));
     } catch (error) {
@@ -207,6 +250,8 @@ export class HudHandler {
   updateNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const noteId = this.requireNoteId(req);
       const { body } = req.body as UpdateNoteInput;
       await this.service.updateNote(sessionId, noteId, body);
@@ -219,6 +264,8 @@ export class HudHandler {
   deleteNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const noteId = this.requireNoteId(req);
       await this.service.deleteNote(sessionId, noteId);
       res.status(SC.OK).json(ok({ sessionId, noteId }, "Note deleted"));
@@ -230,6 +277,8 @@ export class HudHandler {
   listPrompts = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       res.status(SC.OK).json(ok({ sessionId, prompts: [] }, "Prompts fetched"));
     } catch (error) {
       next(error);
@@ -239,6 +288,8 @@ export class HudHandler {
   updatePrompt = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const promptId = this.requirePromptId(req);
       const { dismissed, used } = req.body as UpdatePromptInput;
       res.status(SC.OK).json(ok({ sessionId, promptId, dismissed, used }, "Prompt updated"));
@@ -250,6 +301,8 @@ export class HudHandler {
   addTagToNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const noteId = this.requireNoteId(req);
       const { tagId } = req.body as AddTagToNoteInput;
       await this.service.addTagToNote(noteId, tagId);
@@ -262,6 +315,8 @@ export class HudHandler {
   removeTagFromNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessionId = this.requireSessionId(req);
+      const userId = this.requireHudUser(req);
+      await this.service.assertUserCanAccessSession(userId, sessionId);
       const noteId = this.requireNoteId(req);
       const tagId = this.requireParam(req, "tagId", "Tag ID");
       await this.service.removeTagFromNote(noteId, tagId);

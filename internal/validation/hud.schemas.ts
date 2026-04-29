@@ -7,9 +7,11 @@ export const TranscriptChunkSchema = z.object({
   context: z.record(z.string(), z.string()).optional(),
 });
 
+const transcriptLineId = z.string().min(1).max(200);
+
 export const CreateTagSchema = z.object({
   label: z.string().min(1, "label is required").max(200, "label is too long"),
-  transcriptId: z.string().uuid("transcriptId must be a valid UUID").optional(),
+  transcriptId: transcriptLineId.optional(),
   createdBy: z.string().max(100).optional(),
   metadata: z.record(z.string(), z.string()).optional(),
 });
@@ -19,7 +21,7 @@ export const UpdateContextSchema = z.object({
 });
 
 export const CreateSessionSchema = z.object({
-  title: z.string().min(1, "title is required").max(200, "title is too long"),
+  title: z.string().min(1, "title is required").max(200, "title is too long").optional(),
   facilitator: z.string().max(100).optional(),
   audience: z.string().max(200).optional(),
   role: z.string().max(100).optional(),
@@ -32,7 +34,7 @@ export const UpdateSessionStatusSchema = z.object({
 
 export const CreateNoteSchema = z.object({
   body: z.string().max(10_000, "body is too long").default(""),
-  transcriptId: z.string().uuid("transcriptId must be a valid UUID").optional(),
+  transcriptId: transcriptLineId.optional(),
 });
 
 export const UpdateNoteSchema = z.object({

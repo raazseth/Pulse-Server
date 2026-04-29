@@ -87,6 +87,7 @@ export interface SessionSnapshot {
   session: HudSession;
   transcriptEntries: TranscriptEntry[];
   tags: SessionTag[];
+  notes: SessionNote[];
   prompts: PromptSuggestion[];
   events: SessionEvent[];
   signals: SignalCue[];

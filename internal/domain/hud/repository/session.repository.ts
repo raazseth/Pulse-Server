@@ -13,7 +13,7 @@ import {
 
 export interface SessionRepository {
   initialize(): Promise<void>;
-  ensureSession(sessionId: string, context?: SessionContext): Promise<HudSession>;
+  ensureSession(sessionId: string, context?: SessionContext, createdBy?: string): Promise<HudSession>;
   getSession(sessionId: string): Promise<HudSession | null>;
   saveTranscriptEntry(entry: TranscriptEntry): Promise<void>;
   hasTranscriptEntry(sessionId: string, transcriptId: string): Promise<boolean>;

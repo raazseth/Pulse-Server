@@ -30,7 +30,7 @@ export class DefaultTranscriptProvider implements TranscriptProvider {
       sessionId: input.sessionId,
       text,
       timestamp: input.timestamp ?? new Date().toISOString(),
-      speakerId: input.speakerId?.trim() || "speaker-1",
+      speakerId: input.speakerId?.trim() || "interviewee",
     };
   }
 }

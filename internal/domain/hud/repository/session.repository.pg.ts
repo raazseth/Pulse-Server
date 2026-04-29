@@ -129,7 +129,7 @@ export class PostgresSessionRepository implements SessionRepository {
     `);
   }
 
-  async ensureSession(sessionId: string, context: SessionContext = {}): Promise<HudSession> {
+  async ensureSession(sessionId: string, context: SessionContext = {}, createdBy?: string): Promise<HudSession> {
     const existing = await this.getSession(sessionId);
     const now = new Date().toISOString();
 
@@ -155,10 +155,21 @@ export class PostgresSessionRepository implements SessionRepository {
     }
 
     await this.pool.query(
-      "INSERT INTO hud_sessions (id, context_json, title, facilitator, audience, role, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-      [sessionId, JSON.stringify(context), '', '', '', '', 'active', now, now],
+      "INSERT INTO hud_sessions (id, context_json, title, facilitator, audience, role, status, created_at, updated_at, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+      [sessionId, JSON.stringify(context), 'Untitled Session', '', '', '', 'active', now, now, createdBy ?? null],
     );
-    return { id: sessionId, context, title: '', facilitator: '', audience: '', role: '', status: 'active', createdAt: now, updatedAt: now };
+    return {
+      id: sessionId,
+      context,
+      title: 'Untitled Session',
+      facilitator: '',
+      audience: '',
+      role: '',
+      status: 'active',
+      ...(createdBy ? { createdBy } : {}),
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   async getSession(sessionId: string): Promise<HudSession | null> {
@@ -318,15 +329,16 @@ export class PostgresSessionRepository implements SessionRepository {
     const session = await this.getSession(sessionId);
     if (!session) return null;
 
-    const [transcriptEntries, tags, prompts, events] = await Promise.all([
+    const [transcriptEntries, tags, notes, prompts, events] = await Promise.all([
       this.listTranscriptEntries(sessionId),
       this.listTags(sessionId),
+      this.listNotes(sessionId),
       this.listPromptSuggestions(sessionId),
       this.listEvents(sessionId),
     ]);
     const signals = events.map(mapSignal).filter((s): s is SignalCue => s !== null);
 
-    return { session, transcriptEntries, tags, prompts, events, signals };
+    return { session, transcriptEntries, tags, notes, prompts, events, signals };
   }
 
   async createSession(input: { id: string; title: string; facilitator: string; audience: string; role: string; createdBy: string }): Promise<HudSession> {
@@ -360,7 +372,7 @@ export class PostgresSessionRepository implements SessionRepository {
               (SELECT COUNT(*)::int FROM hud_notes n WHERE n.session_id = s.id) AS note_count
        FROM hud_sessions s
        WHERE s.created_by = $1
-       ORDER BY s.created_at DESC`,
+       ORDER BY s.updated_at DESC, s.created_at DESC`,
       [createdBy],
     );
     return rows.map((r) => ({
