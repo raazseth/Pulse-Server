@@ -4,8 +4,13 @@ import { config } from "@/internal/config/config";
 const exactOrigins = new Set(config.cors.allowedOrigins);
 const vercelSuffix = config.cors.vercelTeamSuffix;
 
+const LOCAL_LOOPBACK_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
 export function isPulseCorsOriginAllowed(origin: string | undefined): boolean {
   if (!origin) {
+    return true;
+  }
+  if (LOCAL_LOOPBACK_ORIGIN.test(origin)) {
     return true;
   }
   if (exactOrigins.has(origin)) {
@@ -39,4 +44,7 @@ export const pulseCors = cors({
   },
   credentials: true,
   optionsSuccessStatus: 204,
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Cookie", "X-Requested-With"],
+  maxAge: 86_400,
 });

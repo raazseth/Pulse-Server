@@ -75,7 +75,7 @@ Copy `.env.example` to the appropriate file (`.env.development`, `.env.productio
 | `OPENAI_API_KEY` | No | — | Primary: OpenAI Chat Completions for HUD prompt suggestions |
 | `OPENAI_MODEL` | No | `gpt-4o-mini` | Chat Completions model id (e.g. `gpt-4o`, `gpt-4o-mini`) |
 | `GEMINI_API_KEY` | No | — | Used for suggestions only when `OPENAI_API_KEY` is not set (or unset `OPENAI_API_KEY` and set `AI_PROVIDER=gemini`) |
-| `ALLOWED_ORIGINS` | No | localhost dev URLs | Comma-separated browser origins allowed to call the API (include every production / custom Vercel hostname) |
+| `ALLOWED_ORIGINS` | No | localhost dev URLs | Extra origins merged with defaults. `http://localhost` and `http://127.0.0.1` on **any port** are always allowed so local Vite can call Cloud Run without listing each port. |
 | `CORS_VERCEL_TEAM_SUFFIX` | No | — | Vercel team slug (e.g. `rajs-projects-ab8ef4bc`). Allows `https://*-TEAM.vercel.app` previews without listing each deploy URL |
 | `HUD_WS_PATH` | No | `/ws/transcript` | WebSocket upgrade path |
 | `NODE_ENV` | No | `development` | `development` / `test` / `production` |
