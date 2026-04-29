@@ -80,6 +80,7 @@ Copy `.env.example` to the appropriate file (`.env.development`, `.env.productio
 | `HUD_WS_PATH` | No | `/ws/transcript` | WebSocket upgrade path |
 | `NODE_ENV` | No | `development` | `development` / `test` / `production` |
 
+
 **Generating secure JWT secrets:**
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
