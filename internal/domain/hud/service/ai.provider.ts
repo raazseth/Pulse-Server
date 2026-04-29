@@ -96,6 +96,11 @@ export class OpenAIProvider implements AIProvider {
       const raw = response.choices[0]?.message?.content;
       if (!raw) throw new Error("Empty OpenAI response");
 
+      logger.info(
+        `HUD AI ▸ OpenAI response [session=${input.sessionId}] model=${this.model} ` +
+          `finish_reason=${response.choices[0]?.finish_reason ?? "n/a"} body: ${raw}`,
+      );
+
       const result = SuggestionArraySchema.safeParse(JSON.parse(stripMarkdown(raw)));
       if (!result.success) throw new Error("Invalid OpenAI response shape");
 

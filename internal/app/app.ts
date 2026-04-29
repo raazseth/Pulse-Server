@@ -12,24 +12,27 @@ import { logger, setLogRepository } from "@/internal/pkg/logger";
 import { LogRepository } from "@/internal/pkg/log-repository";
 
 function resolveAIProvider(): AIProvider {
-  const explicit = config.hud.aiProvider?.toLowerCase();
+  const explicit = config.hud.aiProvider?.trim().toLowerCase();
   const openaiOpts = { model: config.hud.openaiModel };
-
-  if (explicit === "gemini") {
-    if (!config.hud.geminiApiKey) throw new Error("AI_PROVIDER=gemini requires GEMINI_API_KEY");
-    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
-  }
 
   if (explicit === "openai") {
     if (!config.hud.openaiApiKey) throw new Error("AI_PROVIDER=openai requires OPENAI_API_KEY");
     return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
   }
 
-  // Prefer OpenAI (ChatGPT API) when both keys are set unless AI_PROVIDER forces gemini above.
-  if (config.hud.openaiApiKey) return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
+  if (config.hud.openaiApiKey) {
+    return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
+  }
+
+  if (explicit === "gemini") {
+    if (!config.hud.geminiApiKey) throw new Error("AI_PROVIDER=gemini requires GEMINI_API_KEY");
+    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
+  }
+
   if (config.hud.geminiApiKey) {
     return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
   }
+
   return new RuleBasedAIProvider();
 }
 

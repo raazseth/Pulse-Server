@@ -1,7 +1,7 @@
 # Pulse HUD — Server
 
 Express + Node.js backend for the Pulse HUD real-time interview system.
-REST API + WebSocket, Postgres storage, JWT auth, OpenAI / Gemini AI providers.
+REST API + WebSocket, Postgres storage, JWT auth, OpenAI (ChatGPT API) as the primary suggestion model with Gemini as an optional fallback when no OpenAI key is set.
 
 ---
 
@@ -71,9 +71,10 @@ Copy `.env.example` to the appropriate file (`.env.development`, `.env.productio
 | `DATABASE_URL` | **Yes** | — | PostgreSQL connection string |
 | `JWT_SECRET` | **Yes (prod)** | dev fallback | Secret for signing access tokens |
 | `JWT_REFRESH_SECRET` | **Yes (prod)** | dev fallback | Secret for signing refresh tokens |
-| `AI_PROVIDER` | No | auto-detect | `openai` or `gemini`. Auto-detects from keys if unset |
-| `OPENAI_API_KEY` | No | — | Enables OpenAI gpt-4o-mini suggestions |
-| `GEMINI_API_KEY` | No | — | Enables Gemini 2.0 Flash suggestions |
+| `AI_PROVIDER` | No | auto-detect | `openai` (error if key missing) or `gemini` (only when `OPENAI_API_KEY` is unset). If `OPENAI_API_KEY` is set, OpenAI is always used for suggestions. |
+| `OPENAI_API_KEY` | No | — | Primary: OpenAI Chat Completions for HUD prompt suggestions |
+| `OPENAI_MODEL` | No | `gpt-4o-mini` | Chat Completions model id (e.g. `gpt-4o`, `gpt-4o-mini`) |
+| `GEMINI_API_KEY` | No | — | Used for suggestions only when `OPENAI_API_KEY` is not set (or unset `OPENAI_API_KEY` and set `AI_PROVIDER=gemini`) |
 | `ALLOWED_ORIGINS` | No | localhost dev URLs | Comma-separated browser origins allowed to call the API (include every production / custom Vercel hostname) |
 | `CORS_VERCEL_TEAM_SUFFIX` | No | — | Vercel team slug (e.g. `rajs-projects-ab8ef4bc`). Allows `https://*-TEAM.vercel.app` previews without listing each deploy URL |
 | `HUD_WS_PATH` | No | `/ws/transcript` | WebSocket upgrade path |

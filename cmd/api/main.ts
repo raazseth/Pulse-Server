@@ -86,8 +86,10 @@ async function main() {
     res.status(503).json({
       type: SC.SERVICE_UNAVAILABLE,
       success: false,
-      message: "Service is starting. Try again shortly.",
-      data: null,
+      message: startupError
+        ? `Service unavailable while starting: ${startupError}`
+        : "Service is starting. Try again shortly.",
+      data: { ready: false },
     });
   });
 
