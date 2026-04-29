@@ -22,6 +22,8 @@ export function HudRoutes(handler: HudHandler, authenticate: RequestHandler) {
   router.delete("/sessions/:sessionId", authenticate, handler.deleteSession);
   router.patch("/sessions/:sessionId/context", authenticate, validateBody(UpdateContextSchema), handler.updateContext);
   router.patch("/sessions/:sessionId/status", authenticate, validateBody(UpdateSessionStatusSchema), handler.updateSessionStatus);
+  router.post("/sessions/:sessionId/start", authenticate, handler.startSession);
+  router.post("/sessions/:sessionId/stop", authenticate, handler.stopSession);
 
   router.post("/sessions/:sessionId/transcript", authenticate, validateBody(TranscriptChunkSchema), handler.createTranscriptChunk);
   router.post("/sessions/:sessionId/tags", authenticate, validateBody(CreateTagSchema), handler.createTag);

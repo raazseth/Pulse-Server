@@ -106,17 +106,28 @@ export class HudSessionService {
       ...signalSaves,
     ]);
 
-    const prompts = await this.aiProvider.generateSuggestions({
-      sessionId: input.sessionId,
-      recentTranscript,
-      context: session?.context,
-    });
+    // Only generate new AI suggestions when the interviewee speaks (system audio).
+    // Interviewer's own mic chunks don't trigger regeneration to avoid noise.
+    const isInterviewee = !entry.speakerId || entry.speakerId === "system";
+    let prompts: PromptSuggestion[];
 
-    await this.sessions.savePromptSuggestions(input.sessionId, prompts);
-    await this.sessions.saveEvent(this.createEvent(input.sessionId, "prompt:update", {
-      promptIds: prompts.map((prompt) => prompt.id),
-      count: prompts.length,
-    }));
+    if (isInterviewee) {
+      prompts = await this.aiProvider.generateSuggestions({
+        sessionId: input.sessionId,
+        recentTranscript,
+        context: session?.context,
+        triggerSpeakerId: entry.speakerId,
+      });
+
+      await this.sessions.savePromptSuggestions(input.sessionId, prompts);
+      await this.sessions.saveEvent(this.createEvent(input.sessionId, "prompt:update", {
+        promptIds: prompts.map((prompt) => prompt.id),
+        count: prompts.length,
+      }));
+    } else {
+      // Return the existing saved prompts without regenerating
+      prompts = (await this.sessions.getSessionSnapshot(input.sessionId))?.prompts ?? [];
+    }
 
     return { entry, prompts, signals };
   }

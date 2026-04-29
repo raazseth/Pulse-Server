@@ -12,6 +12,7 @@ import { initHudSocket } from "@/internal/domain/hud/socket/hud.socket";
 import { AppError } from "@/internal/pkg/AppError";
 import { logger } from "@/internal/pkg/logger";
 import SC from "@/internal/pkg/response";
+import { transcriptionService } from "@/internal/domain/hud/service/transcription.service";
 
 const errorHandler: ErrorRequestHandler = (
   err: unknown,
@@ -103,6 +104,9 @@ async function main() {
         ready = true;
         startupError = "";
         logger.info("Runtime ▸ dependencies initialized");
+        transcriptionService.warmup().catch((err) =>
+          logger.warn(`Whisper warmup error: ${err instanceof Error ? err.message : String(err)}`),
+        );
       } catch (err) {
         startupError = err instanceof Error ? err.message : String(err);
         logger.error("Runtime ▸ initialization failed, retrying in 5s", err);

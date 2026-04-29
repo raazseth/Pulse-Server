@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from "@/internal/pkg/logger";
 import { PromptSuggestion, SessionContext, TranscriptEntry } from "@/internal/domain/hud/model/hud.model";
 
@@ -14,19 +13,27 @@ export interface AIProvider {
     sessionId: string;
     recentTranscript: TranscriptEntry[];
     context?: SessionContext;
+    triggerSpeakerId?: string;
   }): Promise<PromptSuggestion[]>;
 }
 
 function buildSystemPrompt(context?: SessionContext): string {
   return [
-    "You assist researchers conducting live qualitative interviews.",
+    "You are a real-time interview coach helping an interviewer during a live interview.",
     context?.role ? `The interviewee's role is: ${context.role}.` : "",
-    context?.notes ? `Study context: ${context.notes}.` : "",
-    "Generate up to 3 short, sharp follow-up prompts the interviewer could ask next.",
-    'Return ONLY a JSON array: [{"title":"short label","text":"the full question"}]',
+    context?.company ? `Company: ${context.company}.` : "",
+    context?.notes ? `Interview focus: ${context.notes}.` : "",
+    "The interviewee just spoke. Based on what they said, generate up to 3 sharp, specific follow-up questions the interviewer should ask next.",
+    "Questions must be grounded in what the interviewee actually said — no generic filler.",
+    "Keep each question concise (one sentence). Prioritize depth, specifics, and uncovering reasoning.",
+    'Return ONLY a valid JSON array, no markdown, no explanation: [{"title":"short label","text":"the full question"}]',
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function stripMarkdown(raw: string): string {
+  return raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
 function buildSuggestions(
@@ -35,49 +42,61 @@ function buildSuggestions(
   recent: TranscriptEntry[],
 ): PromptSuggestion[] {
   const now = new Date().toISOString();
-  return parsed.slice(0, 5).map((item) => ({
+  return parsed.slice(0, 3).map((item) => ({
     id: randomUUID(),
     sessionId,
     title: String(item.title),
     text: String(item.text),
     timestamp: now,
     transcriptIds: recent.map((e) => e.id),
+    suggestionOrigin: "model" as const,
   }));
 }
 
+export type OpenAIProviderOptions = {
+  /** OpenAI chat model id (default gpt-4o-mini). */
+  model?: string;
+};
+
 export class OpenAIProvider implements AIProvider {
   private readonly client: OpenAI;
+  private readonly model: string;
   private readonly fallback = new RuleBasedAIProvider();
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, options?: OpenAIProviderOptions) {
     this.client = new OpenAI({ apiKey, timeout: 10_000 });
+    this.model = options?.model?.trim() || "gpt-4o-mini";
   }
 
   async generateSuggestions(input: {
     sessionId: string;
     recentTranscript: TranscriptEntry[];
     context?: SessionContext;
+    triggerSpeakerId?: string;
   }): Promise<PromptSuggestion[]> {
     try {
-      const recent = input.recentTranscript.slice(-5);
+      const recent = input.recentTranscript.slice(-8);
       const transcriptText = recent
-        .map((e) => `[${e.speakerId}]: ${e.text}`)
+        .map((e) => {
+          const label = e.speakerId === "system" ? "INTERVIEWEE" : "INTERVIEWER";
+          return `[${label}]: ${e.text}`;
+        })
         .join("\n");
 
       const response = await this.client.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: this.model,
         messages: [
           { role: "system", content: buildSystemPrompt(input.context) },
-          { role: "user", content: `Recent transcript:\n${transcriptText}` },
+          { role: "user", content: `Conversation so far:\n${transcriptText}\n\nGenerate 3 follow-up questions for the INTERVIEWER to ask now.` },
         ],
-        max_tokens: 400,
+        max_tokens: 500,
         temperature: 0.7,
       });
 
       const raw = response.choices[0]?.message?.content;
       if (!raw) throw new Error("Empty OpenAI response");
 
-      const result = SuggestionArraySchema.safeParse(JSON.parse(raw));
+      const result = SuggestionArraySchema.safeParse(JSON.parse(stripMarkdown(raw)));
       if (!result.success) throw new Error("Invalid OpenAI response shape");
 
       return buildSuggestions(result.data, input.sessionId, recent);
@@ -88,53 +107,83 @@ export class OpenAIProvider implements AIProvider {
   }
 }
 
-export class GeminiProvider implements AIProvider {
-  private readonly client: GoogleGenerativeAI;
-  private readonly fallback = new RuleBasedAIProvider();
-  private readonly modelName = "gemini-2.0-flash";
+export type GeminiProviderOptions = {
+  modelId?: string;
+};
 
-  constructor(apiKey: string) {
-    this.client = new GoogleGenerativeAI(apiKey);
+export class GeminiProvider implements AIProvider {
+  private readonly apiKey: string;
+  private readonly endpoint: string;
+  private readonly fallback = new RuleBasedAIProvider();
+  private backoffUntil = 0;
+
+  constructor(apiKey: string, options?: GeminiProviderOptions) {
+    this.apiKey = apiKey;
+    const model = options?.modelId?.trim() || "gemini-2.5-flash";
+    this.endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   }
 
   async generateSuggestions(input: {
     sessionId: string;
     recentTranscript: TranscriptEntry[];
     context?: SessionContext;
+    triggerSpeakerId?: string;
   }): Promise<PromptSuggestion[]> {
+    if (Date.now() < this.backoffUntil) {
+      return this.fallback.generateSuggestions(input);
+    }
+
     try {
-      const recent = input.recentTranscript.slice(-5);
+      const recent = input.recentTranscript.slice(-8);
       const transcriptText = recent
-        .map((e) => `[${e.speakerId}]: ${e.text}`)
+        .map((e) => {
+          const label = e.speakerId === "system" ? "INTERVIEWEE" : "INTERVIEWER";
+          return `[${label}]: ${e.text}`;
+        })
         .join("\n");
 
-      const genModel = this.client.getGenerativeModel({
-        model: this.modelName,
-        systemInstruction: buildSystemPrompt(input.context),
+      const userMessage = `${buildSystemPrompt(input.context)}\n\nConversation so far:\n${transcriptText}\n\nGenerate 3 follow-up questions for the INTERVIEWER to ask now.`;
+
+      const body = {
+        contents: [
+          { role: "user", parts: [{ text: userMessage }] },
+        ],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+      };
+
+      const res = await fetch(`${this.endpoint}?key=${this.apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8_000),
       });
 
-      const result = await genModel.generateContent(
-        {
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `Recent transcript:\n${transcriptText}` }],
-            },
-          ],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 400 },
-        },
-        { timeout: 10_000 },
-      );
+      if (!res.ok) {
+        const errText = await res.text();
+        if (res.status >= 400 && res.status < 500) {
+          this.backoffUntil = Date.now() + 5 * 60 * 1000;
+        }
+        throw new Error(`Gemini API ${res.status}: ${errText.slice(0, 200)}`);
+      }
 
-      const raw = result.response.text();
+      const json = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const raw = json.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!raw) throw new Error("Empty Gemini response");
 
-      const parsed = SuggestionArraySchema.safeParse(JSON.parse(raw));
+      const parsed = SuggestionArraySchema.safeParse(JSON.parse(stripMarkdown(raw)));
       if (!parsed.success) throw new Error("Invalid Gemini response shape");
 
+      this.backoffUntil = 0;
       return buildSuggestions(parsed.data, input.sessionId, recent);
     } catch (err) {
-      logger.warn(`Gemini provider failed, using fallback: ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      const paused = Date.now() < this.backoffUntil;
+      logger.warn(
+        `Gemini provider failed, using fallback: ${msg}` +
+          (paused ? " (Gemini HTTP paused ~5 min after 4xx — check GEMINI_API_KEY / GEMINI_MODEL)" : ""),
+      );
       return this.fallback.generateSuggestions(input);
     }
   }
@@ -158,6 +207,7 @@ export class RuleBasedAIProvider implements AIProvider {
     sessionId: string;
     recentTranscript: TranscriptEntry[];
     context?: SessionContext;
+    triggerSpeakerId?: string;
   }): Promise<PromptSuggestion[]> {
     const now = new Date().toISOString();
     const seeds = input.recentTranscript.slice(-5);

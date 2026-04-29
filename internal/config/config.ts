@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
+// Load order: .env.local (highest priority, never committed) → .env.<NODE_ENV> → .env
+dotenv.config({ path: ".env.local" });
 dotenv.config({ path: `.env.${NODE_ENV}` });
 dotenv.config();
 
@@ -48,9 +50,14 @@ const SERVER_PORT = resolvePort(process.env.PORT, 8080);
 const SERVER_HOST = process.env.HOST?.trim() || "0.0.0.0";
 const HUD_WS_PATH = process.env.HUD_WS_PATH || "/ws/transcript";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 const AI_PROVIDER = process.env.AI_PROVIDER;
 const DATABASE_URL = process.env.DATABASE_URL;
+const WHISPER_MODEL = process.env.WHISPER_MODEL?.trim() || "base.en";
+const WHISPER_LANGUAGE = process.env.WHISPER_LANGUAGE?.trim() || "en";
+const WHISPER_MODELS_DIR = process.env.WHISPER_MODELS_DIR?.trim() || "./models";
 
 const JWT_SECRET = requireInProduction("JWT_SECRET", "dev-jwt-secret-change-in-production");
 const JWT_REFRESH_SECRET = requireInProduction("JWT_REFRESH_SECRET", "dev-refresh-secret-change-in-production");
@@ -73,9 +80,16 @@ export const config = {
   hud: {
     wsPath: HUD_WS_PATH,
     openaiApiKey: OPENAI_API_KEY,
+    openaiModel: OPENAI_MODEL,
     geminiApiKey: GEMINI_API_KEY,
+    geminiModel: GEMINI_MODEL,
     aiProvider: AI_PROVIDER,
     databaseUrl: DATABASE_URL,
+  },
+  whisper: {
+    model: WHISPER_MODEL,
+    language: WHISPER_LANGUAGE,
+    modelsDir: WHISPER_MODELS_DIR,
   },
   auth: {
     jwtSecret: JWT_SECRET,

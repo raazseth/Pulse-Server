@@ -55,6 +55,7 @@ export interface PromptSuggestion {
   text: string;
   timestamp: string;
   transcriptIds: string[];
+  suggestionOrigin?: "model";
 }
 
 export interface SessionTag {

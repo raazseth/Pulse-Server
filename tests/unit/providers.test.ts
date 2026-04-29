@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("@google/generative-ai");
-
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GeminiProvider, RuleBasedAIProvider } from "@/internal/domain/hud/service/ai.provider";
 import { DefaultTranscriptProvider } from "@/internal/domain/hud/service/transcript.provider";
 import { TranscriptEntry } from "@/internal/domain/hud/model/hud.model";
@@ -96,29 +93,36 @@ describe("RuleBasedAIProvider", () => {
 describe("GeminiProvider", () => {
   const sessionId = "sess-gemini-test";
 
-  const mockGenerateContent = vi.fn();
-  const mockGetGenerativeModel = vi.fn();
+  function geminiRestPayload(text: string) {
+    return {
+      candidates: [{ content: { parts: [{ text }] } }],
+    };
+  }
+
+  function mockFetchOk(suggestions: Array<{ title: string; text: string }>) {
+    const text = JSON.stringify(suggestions);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(geminiRestPayload(text)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+  }
 
   beforeEach(() => {
-    vi.mocked(GoogleGenerativeAI).mockImplementation(function (this: Record<string, unknown>) {
-      this.getGenerativeModel = mockGetGenerativeModel.mockReturnValue({
-        generateContent: mockGenerateContent,
-      });
-    } as unknown as typeof GoogleGenerativeAI);
+    vi.stubGlobal("fetch", vi.fn());
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  function mockGeminiResponse(suggestions: Array<{ title: string; text: string }>) {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => JSON.stringify(suggestions) },
-    });
-  }
-
-  it("returns suggestions parsed from the Gemini SDK response", async () => {
-    mockGeminiResponse([
+  it("returns suggestions parsed from the Gemini REST response", async () => {
+    mockFetchOk([
       { title: "Clarify the decision", text: "Can you walk me through that decision?" },
       { title: "Probe the risk", text: "What were the biggest risks you foresaw?" },
     ]);
@@ -136,10 +140,22 @@ describe("GeminiProvider", () => {
     expect(results[0].timestamp).toBeTruthy();
   });
 
-  it("caps results at 5 even when the SDK returns more", async () => {
-    mockGeminiResponse(
-      Array.from({ length: 8 }, (_, i) => ({ title: `Prompt ${i}`, text: `Question ${i}` })),
-    );
+  it("calls v1beta gemini-2.5-flash generateContent", async () => {
+    mockFetchOk([{ title: "A", text: "Q" }]);
+
+    const provider = new GeminiProvider("my-key");
+    await provider.generateSuggestions({
+      sessionId,
+      recentTranscript: [makeEntry("Hi.")],
+    });
+
+    const url = vi.mocked(fetch).mock.calls[0][0] as string;
+    expect(url).toContain("generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+    expect(url).toContain("key=my-key");
+  });
+
+  it("caps parsed model suggestions at 3 even when the API returns more", async () => {
+    mockFetchOk(Array.from({ length: 8 }, (_, i) => ({ title: `Prompt ${i}`, text: `Question ${i}` })));
 
     const provider = new GeminiProvider("fake-key");
     const results = await provider.generateSuggestions({
@@ -147,12 +163,12 @@ describe("GeminiProvider", () => {
       recentTranscript: [makeEntry("Some context.")],
     });
 
-    expect(results.length).toBeLessThanOrEqual(5);
+    expect(results).toHaveLength(3);
   });
 
   it("includes transcript ids from the recent entries", async () => {
     const entry = makeEntry("How did that go?", "entry-abc");
-    mockGeminiResponse([{ title: "Follow up", text: "Tell me more." }]);
+    mockFetchOk([{ title: "Follow up", text: "Tell me more." }]);
 
     const provider = new GeminiProvider("fake-key");
     const results = await provider.generateSuggestions({
@@ -163,8 +179,8 @@ describe("GeminiProvider", () => {
     expect(results[0].transcriptIds).toContain("entry-abc");
   });
 
-  it("passes context role and notes into the system instruction", async () => {
-    mockGenerateContent.mockResolvedValueOnce({ response: { text: () => "[]" } });
+  it("passes context role and notes into the user message", async () => {
+    mockFetchOk([]);
 
     const provider = new GeminiProvider("fake-key");
     await provider.generateSuggestions({
@@ -173,15 +189,17 @@ describe("GeminiProvider", () => {
       context: { role: "Engineering Manager", notes: "Focus on team dynamics" },
     });
 
-    const modelOptions = mockGetGenerativeModel.mock.calls[0][0] as {
-      systemInstruction: string;
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
     };
-    expect(modelOptions.systemInstruction).toContain("Engineering Manager");
-    expect(modelOptions.systemInstruction).toContain("Focus on team dynamics");
+    const userText = body.contents[0].parts[0].text;
+    expect(userText).toContain("Engineering Manager");
+    expect(userText).toContain("Focus on team dynamics");
   });
 
-  it("falls back to rule-based suggestions when the SDK throws", async () => {
-    mockGenerateContent.mockRejectedValueOnce(new Error("Network error"));
+  it("falls back to rule-based suggestions when fetch rejects", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
 
     const provider = new GeminiProvider("fake-key");
     const results = await provider.generateSuggestions({
@@ -193,8 +211,11 @@ describe("GeminiProvider", () => {
     expect(results.every((s) => s.sessionId === sessionId)).toBe(true);
   });
 
-  it("falls back to rule-based suggestions when the SDK returns an error response", async () => {
-    mockGenerateContent.mockRejectedValueOnce(new Error("429 Too Many Requests"));
+  it("falls back to rule-based suggestions when the API returns non-OK", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 429, statusText: "Too Many Requests" })),
+    );
 
     const provider = new GeminiProvider("fake-key");
     const results = await provider.generateSuggestions({
@@ -207,10 +228,54 @@ describe("GeminiProvider", () => {
     expect(titles).toContain("Probe the risk");
   });
 
-  it("falls back gracefully when the SDK returns malformed text", async () => {
-    mockGenerateContent.mockResolvedValueOnce({
-      response: { text: () => "not json {{{" },
+  it("after a 4xx does not call fetch again until backoff expires", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 404, statusText: "Not Found" }))
+      .mockResolvedValue(
+        new Response(JSON.stringify(geminiRestPayload(JSON.stringify([{ title: "A", text: "B" }]))), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new GeminiProvider("fake-key");
+    await provider.generateSuggestions({
+      sessionId,
+      recentTranscript: [makeEntry("hello")],
     });
+    await provider.generateSuggestions({
+      sessionId,
+      recentTranscript: [makeEntry("hello again")],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses custom model id in the endpoint", async () => {
+    mockFetchOk([{ title: "A", text: "Q" }]);
+
+    const provider = new GeminiProvider("k", { modelId: "gemini-2.5-flash-preview-05-20" });
+    await provider.generateSuggestions({
+      sessionId,
+      recentTranscript: [makeEntry("Hi.")],
+    });
+
+    const url = vi.mocked(fetch).mock.calls[0][0] as string;
+    expect(url).toContain("models/gemini-2.5-flash-preview-05-20:generateContent");
+  });
+
+  it("falls back gracefully when the API returns malformed JSON in the model text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(geminiRestPayload("not json {{{")), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
 
     const provider = new GeminiProvider("fake-key");
     const results = await provider.generateSuggestions({

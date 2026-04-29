@@ -102,6 +102,26 @@ export class HudHandler {
     }
   };
 
+  startSession = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sessionId = this.requireSessionId(req);
+      await this.service.updateSessionStatus(sessionId, "active");
+      res.status(SC.OK).json(ok({ sessionId, status: "active" }, "Session started"));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  stopSession = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const sessionId = this.requireSessionId(req);
+      await this.service.updateSessionStatus(sessionId, "ended");
+      res.status(SC.OK).json(ok({ sessionId, status: "ended" }, "Session stopped"));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   createTranscriptChunk = async (
     req: Request,
     res: Response,

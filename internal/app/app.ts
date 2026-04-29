@@ -13,19 +13,23 @@ import { LogRepository } from "@/internal/pkg/log-repository";
 
 function resolveAIProvider(): AIProvider {
   const explicit = config.hud.aiProvider?.toLowerCase();
+  const openaiOpts = { model: config.hud.openaiModel };
 
   if (explicit === "gemini") {
     if (!config.hud.geminiApiKey) throw new Error("AI_PROVIDER=gemini requires GEMINI_API_KEY");
-    return new GeminiProvider(config.hud.geminiApiKey);
+    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
   }
 
   if (explicit === "openai") {
     if (!config.hud.openaiApiKey) throw new Error("AI_PROVIDER=openai requires OPENAI_API_KEY");
-    return new OpenAIProvider(config.hud.openaiApiKey);
+    return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
   }
 
-  if (config.hud.openaiApiKey) return new OpenAIProvider(config.hud.openaiApiKey);
-  if (config.hud.geminiApiKey) return new GeminiProvider(config.hud.geminiApiKey);
+  // Prefer OpenAI (ChatGPT API) when both keys are set unless AI_PROVIDER forces gemini above.
+  if (config.hud.openaiApiKey) return new OpenAIProvider(config.hud.openaiApiKey, openaiOpts);
+  if (config.hud.geminiApiKey) {
+    return new GeminiProvider(config.hud.geminiApiKey, { modelId: config.hud.geminiModel });
+  }
   return new RuleBasedAIProvider();
 }
 
@@ -58,9 +62,18 @@ export async function createApp(options?: { databaseUrl?: string; skipRateLimiti
   const authService = new AuthService(authRepo);
 
   const aiProvider = resolveAIProvider();
-  const aiLabel = aiProvider instanceof GeminiProvider ? "Gemini (gemini-2.0-flash)"
-    : aiProvider instanceof OpenAIProvider ? "OpenAI (gpt-4o-mini)"
+  const aiLabel = aiProvider instanceof GeminiProvider ? `Gemini (${config.hud.geminiModel})`
+    : aiProvider instanceof OpenAIProvider ? `OpenAI (${config.hud.openaiModel})`
     : "rule-based";
+
+  if (aiProvider instanceof GeminiProvider) {
+    logger.info(
+      `HUD AI ▸ Gemini endpoint host/path: generativelanguage.googleapis.com/v1beta/models/${config.hud.geminiModel}:generateContent`,
+    );
+  }
+  if (aiProvider instanceof OpenAIProvider) {
+    logger.info(`HUD AI ▸ OpenAI chat.completions model: ${config.hud.openaiModel}`);
+  }
 
   const hudService = new HudSessionService(
     sessionRepository,

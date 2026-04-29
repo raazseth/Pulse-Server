@@ -36,8 +36,19 @@ function log(severity: LogLevel, msg: string, err?: unknown) {
   if (severity === "ERROR") repo?.insert(severity, message, stack);
 }
 
+function logGreen(msg: string) {
+  if (isProduction) {
+    process.stdout.write(
+      JSON.stringify({ severity: "INFO", message: msg, timestamp: new Date().toISOString() }) + "\n",
+    );
+  } else {
+    console.log(`\x1b[32m${new Date().toISOString()} INFO    ${msg}\x1b[0m`);
+  }
+}
+
 export const logger = {
-  info:  (msg: string)                => log("INFO",    msg),
-  warn:  (msg: string)                => log("WARNING", msg),
-  error: (msg: string, err?: unknown) => log("ERROR",   msg, err),
+  info:    (msg: string)                => log("INFO",    msg),
+  success: (msg: string)                => logGreen(msg),
+  warn:    (msg: string)                => log("WARNING", msg),
+  error:   (msg: string, err?: unknown) => log("ERROR",   msg, err),
 };

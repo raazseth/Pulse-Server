@@ -104,7 +104,7 @@ export function createRouter(
   router.use("/hud/sessions/:sessionId/transcript", transcriptLimiter);
   router.use("/hud", HudRoutes(new HudHandler(hudService), authenticate as RequestHandler));
 
-  const audioHandler = new AudioHandler(config.hud.openaiApiKey, config.hud.geminiApiKey, config.hud.aiProvider);
+  const audioHandler = new AudioHandler();
   router.post(
     "/hud/audio/transcribe",
     authenticate as RequestHandler,
