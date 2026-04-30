@@ -4,6 +4,7 @@ import {
   buildRoleTranscriptDigests,
   GeminiProvider,
   RuleBasedAIProvider,
+  shouldTriggerSuggestionAi,
 } from "@/internal/domain/hud/service/ai.provider";
 import { DefaultTranscriptProvider } from "@/internal/domain/hud/service/transcript.provider";
 import { TranscriptEntry } from "@/internal/domain/hud/model/hud.model";
@@ -17,6 +18,18 @@ function makeEntry(text: string, id?: string, speakerId = "interviewee"): Transc
     timestamp: new Date().toISOString(),
   };
 }
+
+describe("shouldTriggerSuggestionAi", () => {
+  it("is true for interviewee and interviewer HUD speakers", () => {
+    expect(shouldTriggerSuggestionAi("interviewee")).toBe(true);
+    expect(shouldTriggerSuggestionAi("Interviewer")).toBe(true);
+    expect(shouldTriggerSuggestionAi("observer")).toBe(true);
+  });
+
+  it("is false for system lines", () => {
+    expect(shouldTriggerSuggestionAi("system")).toBe(false);
+  });
+});
 
 describe("buildRoleTranscriptDigests", () => {
   it("splits interviewer vs interviewee lines and includes entry ids", () => {

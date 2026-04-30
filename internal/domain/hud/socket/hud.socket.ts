@@ -194,12 +194,12 @@ async function handleMessage(
   if (message.type === "transcript:chunk") {
     const { sessionId } = message.payload;
     await hudService.assertUserCanAccessSession(userId, sessionId);
-    const ingest = await hudService.ingestTranscriptChunk(message.payload);
+    const ingest = await hudService.ingestTranscriptChunk({ ...message.payload, userId });
     manager.broadcast(sessionId, { type: "transcript:chunk", payload: ingest.entry });
     if (ingest.signals.length) {
       manager.broadcast(sessionId, { type: "signal:detected", payload: ingest.signals });
     }
-    if (ingest.isInterviewee) {
+    if (ingest.triggersSuggestionAi) {
       void hudService
         .runIntervieweeSuggestionGeneration(sessionId, ingest.entry.speakerId, ingest.mergedContext)
         .then((prompts) => {
@@ -208,7 +208,7 @@ async function handleMessage(
         })
         .catch((err) => {
           logger.error(
-            `transcript:chunk interviewee AI: ${err instanceof Error ? err.message : String(err)}`,
+            `transcript:chunk suggestion AI: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
     } else {
@@ -254,6 +254,7 @@ async function handleMessage(
     const ingest = await hudService.ingestTranscriptChunk({
       sessionId,
       text,
+      userId,
       speakerId: speakerId?.trim() || "system",
       context,
     });
@@ -267,7 +268,7 @@ async function handleMessage(
       manager.broadcast(sessionId, { type: "signal:detected", payload: ingest.signals });
     }
 
-    if (ingest.isInterviewee) {
+    if (ingest.triggersSuggestionAi) {
       logger.info(
         `HUD AI ▸ queue suggestions (audio) [session=${sessionId}] speakerId=${ingest.entry.speakerId} transcriptId=${ingest.entry.id}`,
       );
@@ -282,7 +283,7 @@ async function handleMessage(
         })
         .catch((err) => {
           logger.error(
-            `audio:chunk interviewee AI: ${err instanceof Error ? err.message : String(err)}`,
+            `audio:chunk suggestion AI: ${err instanceof Error ? err.message : String(err)}`,
           );
         });
     } else {
@@ -293,7 +294,7 @@ async function handleMessage(
 
   if (message.type === "tag:create") {
     await hudService.assertUserCanAccessSession(userId, message.payload.sessionId);
-    const { tag, created: isNew } = await hudService.createTag(message.payload);
+    const { tag, created: isNew } = await hudService.createTag({ ...message.payload, userId });
     if (isNew) {
       manager.broadcast(message.payload.sessionId, { type: "tag:created", payload: tag });
     }
@@ -302,7 +303,7 @@ async function handleMessage(
 
   if (message.type === "session:context") {
     await hudService.assertUserCanAccessSession(userId, message.payload.sessionId);
-    const snapshot = await hudService.updateSessionContext(message.payload);
+    const snapshot = await hudService.updateSessionContext({ ...message.payload, userId });
     manager.broadcast(message.payload.sessionId, { type: "session:state", payload: snapshot });
   }
 }

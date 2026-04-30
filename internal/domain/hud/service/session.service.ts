@@ -15,7 +15,7 @@ import {
   TranscriptEntry,
 } from "@/internal/domain/hud/model/hud.model";
 import { SessionRepository } from "@/internal/domain/hud/repository/session.repository";
-import { AIProvider, isIntervieweeSpeakerId } from "./ai.provider";
+import { AIProvider, isIntervieweeSpeakerId, shouldTriggerSuggestionAi } from "./ai.provider";
 import { TranscriptProvider } from "./transcript.provider";
 
 interface ProcessTranscriptChunkInput {
@@ -27,13 +27,14 @@ interface ProcessTranscriptChunkInput {
   context?: SessionContext;
 }
 
-/** Persisted transcript + metadata; AI for interviewee runs separately for WebSocket realtime. */
+/** Persisted transcript + metadata; AI runs separately for WebSocket realtime when triggersSuggestionAi. */
 export interface IngestTranscriptChunkResult {
   entry: TranscriptEntry;
   signals: SignalCue[];
-  isInterviewee: boolean;
+  /** True when this chunk should queue async prompt generation (interviewee-style lines + HUD "interviewer"). */
+  triggersSuggestionAi: boolean;
   mergedContext: SessionContext | undefined;
-  /** Persisted prompts when chunk is interviewer-side; empty when interviewee. */
+  /** Persisted prompts when chunk does not trigger AI; empty when triggersSuggestionAi. */
   existingPrompts: PromptSuggestion[];
 }
 
@@ -67,10 +68,25 @@ export class HudSessionService {
     private readonly aiProvider: AIProvider,
   ) {}
 
+  private async claimSessionIfUnowned(sessionId: string, userId: string): Promise<void> {
+    const claimed = await this.sessions.setSessionOwnerIfUnset(sessionId, userId);
+    if (claimed === userId) return;
+    const again = await this.sessions.getSession(sessionId);
+    if (!again) {
+      throw new AppError("Session not found", 0, SC.NOT_FOUND);
+    }
+    if (again.createdBy === userId) return;
+    throw new AppError("Forbidden: session is owned by another user", 0, SC.FORBIDDEN);
+  }
+
   async assertUserCanAccessSession(userId: string, sessionId: string): Promise<void> {
     const session = await this.sessions.getSession(sessionId);
     if (!session) {
       throw new AppError("Session not found", 0, SC.NOT_FOUND);
+    }
+    if (!session.createdBy) {
+      await this.claimSessionIfUnowned(sessionId, userId);
+      return;
     }
     if (session.createdBy !== userId) {
       throw new AppError("Forbidden: session is owned by another user", 0, SC.FORBIDDEN);
@@ -86,7 +102,14 @@ export class HudSessionService {
       await this.sessions.ensureSession(sessionId, stripEphemeralChunkContext(context), userId);
       return;
     }
-    if (!userId || existing.createdBy !== userId) {
+    if (!userId) {
+      throw new AppError("Authentication required", 0, SC.UNAUTHORIZED);
+    }
+    if (!existing.createdBy) {
+      await this.claimSessionIfUnowned(sessionId, userId);
+      return;
+    }
+    if (existing.createdBy !== userId) {
       throw new AppError("Forbidden: session is owned by another user", 0, SC.FORBIDDEN);
     }
   }
@@ -147,18 +170,14 @@ export class HudSessionService {
         }
       : undefined;
 
-    const isInterviewee = isIntervieweeSpeakerId(entry.speakerId);
-    const existingPrompts = isInterviewee
+    const triggersSuggestionAi = shouldTriggerSuggestionAi(entry.speakerId);
+    const existingPrompts = triggersSuggestionAi
       ? []
       : (await this.sessions.getSessionSnapshot(input.sessionId))?.prompts ?? [];
 
-    return { entry, signals, isInterviewee, mergedContext, existingPrompts };
+    return { entry, signals, triggersSuggestionAi, mergedContext, existingPrompts };
   }
 
-  /**
-   * Run AI suggestion generation for an interviewee chunk, serialized per session with any
-   * concurrent requests (e.g. WebSocket + REST).
-   */
   runIntervieweeSuggestionGeneration(
     sessionId: string,
     triggerSpeakerId: string,
@@ -208,7 +227,7 @@ export class HudSessionService {
     signals: SignalCue[];
   }> {
     const ingest = await this.ingestTranscriptChunk(input);
-    const prompts = ingest.isInterviewee
+    const prompts = ingest.triggersSuggestionAi
       ? await this.runIntervieweeSuggestionGeneration(
           input.sessionId,
           ingest.entry.speakerId,
@@ -341,6 +360,10 @@ export class HudSessionService {
         throw new AppError("Session not found", 0, SC.NOT_FOUND);
       }
       await this.sessions.ensureSession(input.sessionId, input.context, input.userId);
+    } else if (!input.userId) {
+      throw new AppError("Authentication required", 0, SC.UNAUTHORIZED);
+    } else if (!existing.createdBy) {
+      await this.claimSessionIfUnowned(input.sessionId, input.userId);
     } else if (existing.createdBy !== input.userId) {
       throw new AppError("Forbidden: session is owned by another user", 0, SC.FORBIDDEN);
     }

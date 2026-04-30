@@ -15,6 +15,7 @@ export interface SessionRepository {
   initialize(): Promise<void>;
   ensureSession(sessionId: string, context?: SessionContext, createdBy?: string): Promise<HudSession>;
   getSession(sessionId: string): Promise<HudSession | null>;
+  setSessionOwnerIfUnset(sessionId: string, userId: string): Promise<string | null>;
   saveTranscriptEntry(entry: TranscriptEntry): Promise<void>;
   hasTranscriptEntry(sessionId: string, transcriptId: string): Promise<boolean>;
   listRecentTranscriptEntries(sessionId: string, limit: number): Promise<TranscriptEntry[]>;

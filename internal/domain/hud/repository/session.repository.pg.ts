@@ -172,6 +172,18 @@ export class PostgresSessionRepository implements SessionRepository {
     };
   }
 
+  async setSessionOwnerIfUnset(sessionId: string, userId: string): Promise<string | null> {
+    const now = new Date().toISOString();
+    const { rows } = await this.pool.query<{ created_by: string }>(
+      `UPDATE hud_sessions
+       SET created_by = $2, updated_at = $3
+       WHERE id = $1 AND (created_by IS NULL OR created_by = '')
+       RETURNING created_by`,
+      [sessionId, userId, now],
+    );
+    return rows[0]?.created_by ?? null;
+  }
+
   async getSession(sessionId: string): Promise<HudSession | null> {
     const { rows } = await this.pool.query<{
       id: string; context_json: string; title: string; facilitator: string;

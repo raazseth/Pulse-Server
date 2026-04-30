@@ -27,6 +27,12 @@ export function isIntervieweeSpeakerId(speakerId: string): boolean {
   return INTERVIEWEE_SPEAKER_IDS.has(speakerId.trim().toLowerCase());
 }
 
+export function shouldTriggerSuggestionAi(speakerId: string): boolean {
+  const s = speakerId.trim().toLowerCase();
+  if (s === "system") return false;
+  return isIntervieweeSpeakerId(speakerId) || s === "interviewer";
+}
+
 function transcriptRoleLabel(speakerId: string): "INTERVIEWEE" | "INTERVIEWER" {
   return isIntervieweeSpeakerId(speakerId) ? "INTERVIEWEE" : "INTERVIEWER";
 }
