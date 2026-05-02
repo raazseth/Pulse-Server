@@ -274,16 +274,17 @@ export class HudHandler {
     }
   };
 
-  listPrompts = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const sessionId = this.requireSessionId(req);
-      const userId = this.requireHudUser(req);
-      await this.service.assertUserCanAccessSession(userId, sessionId);
-      res.status(SC.OK).json(ok({ sessionId, prompts: [] }, "Prompts fetched"));
-    } catch (error) {
-      next(error);
-    }
-  };
+  // listPrompts — route disabled; prompts are pushed via WS prompt:update, not polled via GET
+  // listPrompts = async (req: Request, res: Response, next: NextFunction) => {
+  //   try {
+  //     const sessionId = this.requireSessionId(req);
+  //     const userId = this.requireHudUser(req);
+  //     await this.service.assertUserCanAccessSession(userId, sessionId);
+  //     res.status(SC.OK).json(ok({ sessionId, prompts: [] }, "Prompts fetched"));
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 
   updatePrompt = async (req: Request, res: Response, next: NextFunction) => {
     try {

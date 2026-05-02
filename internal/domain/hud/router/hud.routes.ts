@@ -34,7 +34,8 @@ export function HudRoutes(handler: HudHandler, authenticate: RequestHandler) {
   router.patch("/sessions/:sessionId/notes/:noteId", authenticate, validateBody(UpdateNoteSchema), handler.updateNote);
   router.delete("/sessions/:sessionId/notes/:noteId", authenticate, handler.deleteNote);
 
-  router.get("/sessions/:sessionId/prompts", authenticate, handler.listPrompts);
+  // GET /sessions/:sessionId/prompts — not integrated; prompts are pushed via WS prompt:update
+  // router.get("/sessions/:sessionId/prompts", authenticate, handler.listPrompts);
   router.patch("/sessions/:sessionId/prompts/:promptId", authenticate, validateBody(UpdatePromptSchema), handler.updatePrompt);
 
   router.post("/sessions/:sessionId/notes/:noteId/tags", authenticate, validateBody(AddTagToNoteSchema), handler.addTagToNote);
