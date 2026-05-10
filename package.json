@@ -11,7 +11,9 @@
     "test:watch": "cross-env NODE_ENV=test vitest",
     "test:coverage": "cross-env NODE_ENV=test vitest run --coverage",
     "prod": "npm run build && cross-env NODE_ENV=production node ./dist/cmd/api/main.js",
-    "start": "node ./dist/cmd/api/main.js"
+    "start": "node ./dist/cmd/api/main.js",
+    "migration": "node ./migrations/run.js",
+    "generate": "npm run migration"
   },
   "keywords": [],
   "author": "",

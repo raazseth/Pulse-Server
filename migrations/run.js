@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 
+require("dotenv").config({ path: ".env.local" });
+require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
+require("dotenv").config();
+require("ts-node/register");
+
 const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
+const { logger } = require("../internal/pkg/logger");
 
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    console.error("ERROR: DATABASE_URL environment variable is not set.");
+    logger.error("ERROR: DATABASE_URL environment variable is not set.");
     process.exit(1);
   }
 
@@ -29,17 +35,17 @@ async function main() {
     for (const file of sqlFiles) {
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, "utf8");
-      console.log(`Running migration: ${file}`);
+      logger.info(`Running migration: ${file}`);
       await client.query(sql);
-      console.log(`  ✓ ${file} completed`);
+      logger.success(`  ✓ ${file} completed`);
     }
-    console.log("All migrations completed successfully.");
+    logger.success("All migrations completed successfully.");
   } finally {
     await client.end();
   }
 }
 
 main().catch((err) => {
-  console.error("Migration failed:", err.message);
+  logger.error("Migration failed", err);
   process.exit(1);
 });
